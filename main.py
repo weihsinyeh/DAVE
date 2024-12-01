@@ -28,6 +28,13 @@ DATASETS = {
     "lvis": FSCD_LVIS_Dataset_SCALE,
 }
 
+import sys
+
+
+def log_imm(msg):
+    sys.stdout.write(msg)
+    sys.stdout.flush()
+
 
 @torch.no_grad()
 def evaluate(args):
@@ -82,15 +89,26 @@ def evaluate(args):
         box_err = []
         err = []
         num_objects = []
-        for img, bboxes, density_map, ids, scale_x, scale_y, shape in tqdm(test_loader):
-
+        for (
+            img,
+            bboxes,
+            density_map,
+            ids,
+            scale_x,
+            scale_y,
+            shape,
+        ) in test_loader:  # tqdm(test_loader):
+            model = model.to(
+                device
+            )  # because it move encoder to cpu if feature too big
             img = img.to(device)
             bboxes = bboxes.to(device)
             density_map = density_map.to(device)
-            model = model.to(device)
+            log_imm(f"Inferecing {shape} ")
             out, aux, tblr, boxes_pred = model(
                 img, bboxes, test.image_names[ids[0].item()]
             )
+            log_imm("Done! ")
             gt_bboxes, resize_factors = test.get_gt_bboxes(ids)
             boxes_pred = [boxes_pred]
 
@@ -105,6 +123,7 @@ def evaluate(args):
                 "file_name": "None",
             }
             scores = boxes_xywh.fields["scores"]
+            log_imm(f"#box: {len(boxes_pred[0].box)} ")
             for i in range(len(boxes_pred[0].box)):
                 box = boxes_xywh.box[i]
                 anno = {
@@ -146,6 +165,7 @@ def evaluate(args):
                 )
                 ** 2
             ).sum()
+            log_imm("Done!\n")
 
         print("END")
         print(

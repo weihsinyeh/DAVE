@@ -440,10 +440,10 @@ class COTR(nn.Module):
                 )
 
             # send through regression head
-            if i == weights.size(0) - 1:
+            if i == weights.size(0) - 1:  # last iteration
                 # send through regression head
                 _x = self.regression_head(correlation_maps)
-                outputR = self.regression_head(correlation_maps)
+                outputR = _x.clone()  # self.regression_head(correlation_maps)
             else:
                 _x = self.aux_heads[i](correlation_maps)
 
