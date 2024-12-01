@@ -52,10 +52,10 @@ def tiling_augmentation(img, bboxes, density_map, resize, jitter, tile_size, hfl
     hflip = torch.rand(num_tiles, num_tiles)
 
     img = make_tile(img, num_tiles, hflip, hflip_p, jitter)
-    img = resize(img[..., :int(y_tile * y_target), :int(x_tile * x_target)])
+    img = resize(img[..., : int(y_tile * y_target), : int(x_tile * x_target)])
 
     density_map = make_tile(density_map, num_tiles, hflip, hflip_p)
-    density_map = density_map[..., :int(y_tile * y_target), :int(x_tile * x_target)]
+    density_map = density_map[..., : int(y_tile * y_target), : int(x_tile * x_target)]
     original_sum = density_map.sum()
     density_map = resize(density_map)
     density_map = density_map / density_map.sum() * original_sum
@@ -68,7 +68,9 @@ def tiling_augmentation(img, bboxes, density_map, resize, jitter, tile_size, hfl
 
 class FSCD_LVISDataset(Dataset):
     def __init__(
-            self, args, split="train",
+        self,
+        args,
+        split="train",
     ):
         data_path = args.data_path
         pseudo_label_file = "pseudo_lvis_" + split + "_cxcywh.json"
@@ -76,11 +78,16 @@ class FSCD_LVISDataset(Dataset):
         self.image_ids = self.coco.getImgIds()
 
         self.transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+            [
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
         )
         self.num_objects = 3
         self.img_path = os.path.join(data_path, "images", "all_images")
-        self.count_anno_file = os.path.join(data_path, "annotations_old", "count_" + split + ".json")
+        self.count_anno_file = os.path.join(
+            data_path, "annotations_old", "count_" + split + ".json"
+        )
         self.count_anno = self.load_json(self.count_anno_file)
 
     def load_json(self, json_file):
@@ -150,39 +157,50 @@ class FSCD_LVISDataset(Dataset):
 
 class FSCD_LVIS_Dataset_SCALE(Dataset):
     def __init__(
-            self, data_path,
-            image_size,
-            split,
-            num_objects,
-            tiling_p,
-            zero_shot,
-            unseen=False
+        self,
+        data_path,
+        image_size,
+        split,
+        num_objects,
+        tiling_p,
+        zero_shot,
+        unseen=False,
     ):
         super().__init__()
-        print("This data is fscd 147 test set, split: {} unseen: ".format(split) + str(unseen))
+        print(
+            "This data is fscd 147 test set, split: {} unseen: ".format(split)
+            + str(unseen)
+        )
         self.split = split
         data_path = "/".join(data_path.split("/")[:-1]) + "/FSCD_LVIS/"
         self.img_size = image_size
         self.transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+            [
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
         )
         self.horizontal_flip_p = 0.5
         self.tiling_p = 0.5
         self.jitter = T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8)
         self.data_path = data_path
-        if self.split != 'val' and unseen:
+        if self.split != "val" and unseen:
             pseudo_label_file = "unseen_instances_" + split + ".json"
         else:
             pseudo_label_file = "instances_" + split + ".json"
-        self.coco = COCO(os.path.join(data_path, 'annotations', pseudo_label_file))
+        self.coco = COCO(os.path.join(data_path, "annotations", pseudo_label_file))
         self.image_ids = self.coco.getImgIds()
         self.resize = T.Resize((image_size, image_size), antialias=True)
         self.num_objects = num_objects
         self.img_path = os.path.join(data_path, "images")
-        if self.split != 'val' and unseen:
-            self.count_anno_file = os.path.join(data_path, "annotations", "unseen_count_" + split + ".json")
+        if self.split != "val" and unseen:
+            self.count_anno_file = os.path.join(
+                data_path, "annotations", "unseen_count_" + split + ".json"
+            )
         else:
-            self.count_anno_file = os.path.join(data_path, "annotations", "count_" + split + ".json")
+            self.count_anno_file = os.path.join(
+                data_path, "annotations", "count_" + split + ".json"
+            )
         self.count_anno = self.load_json(self.count_anno_file)
         self.counter = 0
 
@@ -252,26 +270,24 @@ class FSCD_LVIS_Dataset_SCALE(Dataset):
         img_info = self.coco.loadImgs([img_id])[0]
         img_file = img_info["file_name"]
 
-        img = T.Compose([
-            T.ToTensor(),
-            self.resize,
-        ])(img)
+        img = T.Compose(
+            [
+                T.ToTensor(),
+                self.resize,
+            ]
+        )(img)
 
         if img.shape[0] < 3:
             img = torch.stack([img[0, :, :], img[0, :, :], img[0, :, :]], 0)
 
-        if self.split != 'train':
-            img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(img)
+        if self.split != "train":
+            img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(
+                img
+            )
 
-        ex_rects = torch.tensor(
-            ex_rects,
-            dtype=torch.float32
-        )[:self.num_objects, ...]
+        ex_rects = torch.tensor(ex_rects, dtype=torch.float32)[: self.num_objects, ...]
         ex_rects = ex_rects / torch.tensor([w, h, w, h]) * self.img_size
-        bboxes = torch.tensor(
-            bboxes,
-            dtype=torch.float32
-        )
+        bboxes = torch.tensor(bboxes, dtype=torch.float32)
         bboxes = bboxes / torch.tensor([w, h, w, h]) * self.img_size
 
         scale_x = min(1, 50 / (bboxes[:, 2] - bboxes[:, 0]).mean())
@@ -281,7 +297,10 @@ class FSCD_LVIS_Dataset_SCALE(Dataset):
 
             scale_y = (int(img.shape[1] * scale_y) // 8 * 8) / img.shape[1]
             scale_x = (int(img.shape[2] * scale_x) // 8 * 8) / img.shape[2]
-            resize_ = T.Resize((int(img.shape[1] * scale_y), int(img.shape[2] * scale_x)), antialias=True)
+            resize_ = T.Resize(
+                (int(img.shape[1] * scale_y), int(img.shape[2] * scale_x)),
+                antialias=True,
+            )
             img_ = resize_(img)
 
             shape = img_.shape
@@ -298,26 +317,25 @@ class FSCD_LVIS_Dataset_SCALE(Dataset):
 
             scale_y = (int(img.shape[1] * scale_y) // 8 * 8) / img.shape[1]
             scale_x = (int(img.shape[2] * scale_x) // 8 * 8) / img.shape[2]
-            resize_ = T.Resize((int(img.shape[1] * scale_y), int(img.shape[2] * scale_x)), antialias=True)
+            resize_ = T.Resize(
+                (int(img.shape[1] * scale_y), int(img.shape[2] * scale_x)),
+                antialias=True,
+            )
             img = resize_(img)
             shape = img.shape
 
         ex_rects = ex_rects * torch.tensor([scale_x, scale_y, scale_x, scale_y])
         return img, ex_rects, img_id, scale_y, scale_x, shape
 
-
     def get_gt_bboxes(self, idxs):
-        if self.split == 'val' or self.split == 'test':
+        if self.split == "val" or self.split == "test":
             l = []
             factors = []
             for i in idxs:
                 img, bboxes, wh = self.get_gt_true_IDX(i.item())
                 w, h = img.size
 
-                bboxes = torch.tensor(
-                    bboxes,
-                    dtype=torch.float32
-                )
+                bboxes = torch.tensor(bboxes, dtype=torch.float32)
                 bboxes = bboxes / torch.tensor([w, h, w, h]) * self.img_size
                 l.append(bboxes)
                 factors.append(torch.tensor([w, h, w, h]) / self.img_size)
@@ -327,39 +345,43 @@ class FSCD_LVIS_Dataset_SCALE(Dataset):
 
 class FSCD_LVIS_Dataset_Test(Dataset):
     def __init__(
-            self, data_path,
-            image_size,
-            split,
-            num_objects,
-            tiling_p,
-            zero_shot,
-            unseen
+        self, data_path, image_size, split, num_objects, tiling_p, zero_shot, unseen
     ):
         super().__init__()
-        print("This data is fscd 147 test set, split: {} unseen: ".format(split) + str(unseen))
+        print(
+            "This data is fscd 147 test set, split: {} unseen: ".format(split)
+            + str(unseen)
+        )
         self.split = split
         data_path = "/".join(data_path.split("/")[:-1]) + "/FSCD_LVIS/"
         self.img_size = image_size
         self.transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+            [
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
         )
         self.horizontal_flip_p = 0.5
         self.tiling_p = 0.5
         self.jitter = T.RandomApply([T.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8)
         self.data_path = data_path
-        if self.split != 'val' and unseen:
+        if self.split != "val" and unseen:
             pseudo_label_file = "unseen_instances_" + split + ".json"
         else:
             pseudo_label_file = "instances_" + split + ".json"
-        self.coco = COCO(os.path.join(data_path, 'annotations', pseudo_label_file))
+        self.coco = COCO(os.path.join(data_path, "annotations", pseudo_label_file))
         self.image_ids = self.coco.getImgIds()
         self.resize = T.Resize((image_size, image_size))
         self.num_objects = num_objects
         self.img_path = os.path.join(data_path, "images")
-        if self.split != 'val' and unseen:
-            self.count_anno_file = os.path.join(data_path, "annotations", "unseen_count_" + split + ".json")
+        if self.split != "val" and unseen:
+            self.count_anno_file = os.path.join(
+                data_path, "annotations", "unseen_count_" + split + ".json"
+            )
         else:
-            self.count_anno_file = os.path.join(data_path, "annotations", "count_" + split + ".json")
+            self.count_anno_file = os.path.join(
+                data_path, "annotations", "count_" + split + ".json"
+            )
         self.count_anno = self.load_json(self.count_anno_file)
         self.counter = 0
         self.diag_opt = 70
@@ -431,85 +453,122 @@ class FSCD_LVIS_Dataset_Test(Dataset):
         img_info = self.coco.loadImgs([img_id])[0]
         img_file = img_info["file_name"]
 
-        img = T.Compose([
-            T.ToTensor(),
-            self.resize,
-        ])(img)
+        img = T.Compose(
+            [
+                T.ToTensor(),
+                self.resize,
+            ]
+        )(img)
 
         if img.shape[0] < 3:
             img = torch.stack([img[0, :, :], img[0, :, :], img[0, :, :]], 0)
 
-        if self.split != 'train':
-            img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(img)
+        if self.split != "train":
+            img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(
+                img
+            )
 
-        ex_rects = torch.tensor(
-            ex_rects,
-            dtype=torch.float32
-        )[:self.num_objects, ...]
+        ex_rects = torch.tensor(ex_rects, dtype=torch.float32)[: self.num_objects, ...]
         ex_rects = ex_rects / torch.tensor([w, h, w, h]) * self.img_size
-        bboxes = torch.tensor(
-            bboxes,
-            dtype=torch.float32
-        )
+        bboxes = torch.tensor(bboxes, dtype=torch.float32)
         bboxes = bboxes / torch.tensor([w, h, w, h]) * self.img_size
 
-        density_map = torch.from_numpy(np.load(os.path.join(
-            self.data_path,
-            'gt_density_map_adaptive_512_512_object_VarV2',
-            os.path.splitext(img_file)[0] + '.npy',
-        ))).unsqueeze(0)
+        density_map = torch.from_numpy(
+            np.load(
+                os.path.join(
+                    self.data_path,
+                    "gt_density_map_adaptive_512_512_object_VarV2",
+                    os.path.splitext(img_file)[0] + ".npy",
+                )
+            )
+        ).unsqueeze(0)
         if self.resizing:
-            diag = torch.sqrt(
-                (ex_rects[:, 0] - ex_rects[:, 2]) ** 2 + (
-                            ex_rects[:, 1] - ex_rects[:, 3]) ** 2).sum() / self.num_objects
+            diag = (
+                torch.sqrt(
+                    (ex_rects[:, 0] - ex_rects[:, 2]) ** 2
+                    + (ex_rects[:, 1] - ex_rects[:, 3]) ** 2
+                ).sum()
+                / self.num_objects
+            )
             scale = self.diag_opt / diag
             if scale < 1:
-                if (ex_rects[:, 0] - ex_rects[:, 2]).sum() / (ex_rects[:, 1] - ex_rects[:, 3]).sum() > 2:
+                if (ex_rects[:, 0] - ex_rects[:, 2]).sum() / (
+                    ex_rects[:, 1] - ex_rects[:, 3]
+                ).sum() > 2:
                     scale_x = 1.0
                     scale_y = scale
-                    self.resize_half = T.Resize((int(512 * scale_x), int(512 * scale_y)))
+                    self.resize_half = T.Resize(
+                        (int(512 * scale_x), int(512 * scale_y))
+                    )
                     new_img = torch.zeros_like(img)
                     img = self.resize_half(img)
-                    new_img[:, 0:int(self.img_size), 0:int(self.img_size * scale)] = img
+                    new_img[
+                        :, 0 : int(self.img_size), 0 : int(self.img_size * scale)
+                    ] = img
                     img = new_img
                     original_sum = density_map.sum()
                     new_density = torch.zeros_like(density_map)
                     density_map = self.resize_half(density_map)
-                    new_density[:, 0:int(self.img_size), 0:int(self.img_size * scale)] = density_map
+                    new_density[
+                        :, 0 : int(self.img_size), 0 : int(self.img_size * scale)
+                    ] = density_map
                     density_map = new_density / new_density.sum() * original_sum
-                    ex_rects = ex_rects * torch.tensor([scale_y, scale_x, scale_y, scale_x])
+                    ex_rects = ex_rects * torch.tensor(
+                        [scale_y, scale_x, scale_y, scale_x]
+                    )
 
-
-                elif (ex_rects[:, 1] - ex_rects[:, 3]).sum() / (ex_rects[:, 0] - ex_rects[:, 2]).sum() > 2:
+                elif (ex_rects[:, 1] - ex_rects[:, 3]).sum() / (
+                    ex_rects[:, 0] - ex_rects[:, 2]
+                ).sum() > 2:
                     scale = scale
                     scale_x = scale
                     scale_y = 1.0
-                    self.resize_half = T.Resize((int(512 * scale_x), int(512 * scale_y)))
+                    self.resize_half = T.Resize(
+                        (int(512 * scale_x), int(512 * scale_y))
+                    )
                     new_img = torch.zeros_like(img)
                     img = self.resize_half(img)
-                    new_img[:, 0:int(self.img_size * scale), 0:int(self.img_size)] = img
+                    new_img[
+                        :, 0 : int(self.img_size * scale), 0 : int(self.img_size)
+                    ] = img
                     img = new_img
                     original_sum = density_map.sum()
                     new_density = torch.zeros_like(density_map)
                     density_map = self.resize_half(density_map)
-                    new_density[:, 0:int(self.img_size * scale), 0:int(self.img_size)] = density_map
+                    new_density[
+                        :, 0 : int(self.img_size * scale), 0 : int(self.img_size)
+                    ] = density_map
                     density_map = new_density / new_density.sum() * original_sum
-                    ex_rects = ex_rects * torch.tensor([scale_y, scale_x, scale_y, scale_x])
+                    ex_rects = ex_rects * torch.tensor(
+                        [scale_y, scale_x, scale_y, scale_x]
+                    )
 
                 else:
                     scale_x = scale
                     scale_y = scale
-                    self.resize_half = T.Resize((int(self.img_size * scale), int(self.img_size * scale)))
+                    self.resize_half = T.Resize(
+                        (int(self.img_size * scale), int(self.img_size * scale))
+                    )
                     new_img = torch.zeros_like(img)
                     img = self.resize_half(img)
-                    new_img[:, 0:int(self.img_size * scale), 0:int(self.img_size * scale)] = img
+                    new_img[
+                        :,
+                        0 : int(self.img_size * scale),
+                        0 : int(self.img_size * scale),
+                    ] = img
                     img = new_img
                     original_sum = density_map.sum()
                     new_density = torch.zeros_like(density_map)
                     density_map = self.resize_half(density_map)
-                    new_density[:, 0:int(self.img_size * scale), 0:int(self.img_size * scale)] = density_map
+                    new_density[
+                        :,
+                        0 : int(self.img_size * scale),
+                        0 : int(self.img_size * scale),
+                    ] = density_map
                     density_map = new_density / new_density.sum() * original_sum
-                    ex_rects = ex_rects * torch.tensor([scale_y, scale_x, scale_y, scale_x])
+                    ex_rects = ex_rects * torch.tensor(
+                        [scale_y, scale_x, scale_y, scale_x]
+                    )
             else:
                 scale_x = 1.0
                 scale_y = 1.0
@@ -521,42 +580,65 @@ class FSCD_LVIS_Dataset_Test(Dataset):
                 scale_y = torch.tensor(scale_y)  # ,dtype=torch.long)
 
         tiled = False
-        if self.split == 'train' and torch.rand(1) < self.tiling_p:
+        if self.split == "train" and torch.rand(1) < self.tiling_p:
             tiled = True
             tile_size = (torch.rand(1) + 1, torch.rand(1) + 1)
             img, ex_rects, density_map = tiling_augmentation(
-                img, ex_rects, density_map, self.resize,
-                self.jitter, tile_size, self.horizontal_flip_p
+                img,
+                ex_rects,
+                density_map,
+                self.resize,
+                self.jitter,
+                tile_size,
+                self.horizontal_flip_p,
             )
 
-        if self.split == 'train':
+        if self.split == "train":
             if not tiled:
                 img = self.jitter(img)
-            img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(img)
+            img = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(
+                img
+            )
 
         if self.resizing:
-            if self.split == 'test' or self.split == 'val':
-                return img, ex_rects, density_map, img_id, torch.tensor([w, h, w, h]) / self.img_size, scale_x, scale_y
+            if self.split == "test" or self.split == "val":
+                return (
+                    img,
+                    ex_rects,
+                    density_map,
+                    img_id,
+                    torch.tensor([w, h, w, h]) / self.img_size,
+                    scale_x,
+                    scale_y,
+                )
             else:
-                return img, ex_rects, density_map, img_id  # , torch.tensor([w, h, w, h]) / self.img_size, bboxes
+                return (
+                    img,
+                    ex_rects,
+                    density_map,
+                    img_id,
+                )  # , torch.tensor([w, h, w, h]) / self.img_size, bboxes
         else:
-            if self.split == 'test' or self.split == 'val':
+            if self.split == "test" or self.split == "val":
                 return img, ex_rects, density_map, img_id
             else:
-                return img, ex_rects, density_map, img_id, torch.tensor([w, h, w, h]) / self.img_size  # , bboxes
+                return (
+                    img,
+                    ex_rects,
+                    density_map,
+                    img_id,
+                    torch.tensor([w, h, w, h]) / self.img_size,
+                )  # , bboxes
 
     def get_gt_bboxes(self, idxs):
-        if self.split == 'val' or self.split == 'test':
+        if self.split == "val" or self.split == "test":
             l = []
             factors = []
             for i in idxs:
                 img, bboxes, wh = self.get_gt_true_IDX(i.item())
                 w, h = img.size
 
-                bboxes = torch.tensor(
-                    bboxes,
-                    dtype=torch.float32
-                )
+                bboxes = torch.tensor(bboxes, dtype=torch.float32)
                 bboxes = bboxes / torch.tensor([w, h, w, h]) * self.img_size
                 l.append(bboxes)
             return l

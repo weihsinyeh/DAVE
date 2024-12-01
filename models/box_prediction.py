@@ -8,8 +8,14 @@ from torchvision import ops
 class ConvBlock(torch.nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=2, padding=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding,
-                               bias=False)
+        self.conv1 = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            bias=False,
+        )
         self.bn = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU()
 
@@ -23,7 +29,9 @@ class FeatureFusionModule(torch.nn.Module):
         super().__init__()
         self.in_channels = in_channels
 
-        self.convblock = ConvBlock(in_channels=self.in_channels, out_channels=num_classes, stride=1)
+        self.convblock = ConvBlock(
+            in_channels=self.in_channels, out_channels=num_classes, stride=1
+        )
         self.conv1 = nn.Conv2d(num_classes, num_classes, kernel_size=1)
         self.relu = nn.ReLU()
         self.conv2 = nn.Conv2d(num_classes, num_classes, kernel_size=1)
@@ -32,7 +40,9 @@ class FeatureFusionModule(torch.nn.Module):
 
     def forward(self, input_1, input_2):
         x = torch.cat((input_1, input_2), dim=1)
-        assert self.in_channels == x.size(1), 'in_channels of ConvBlock should be {}'.format(x.size(1))
+        assert self.in_channels == x.size(
+            1
+        ), "in_channels of ConvBlock should be {}".format(x.size(1))
         feature = self.convblock(x)
         x = self.avgpool(feature)
 
@@ -59,8 +69,16 @@ class FCOSHead(nn.Module):
         conv_channels = 256
 
         bbox_tower = []
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=conv_channels, kernel_size=3, stride=1, padding=1)
-        self.ffm = FeatureFusionModule(num_classes=conv_channels, in_channels=conv_channels * 2)
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=conv_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+        self.ffm = FeatureFusionModule(
+            num_classes=conv_channels, in_channels=conv_channels * 2
+        )
         bbox_tower.append(
             nn.Conv2d(
                 conv_channels,
@@ -68,7 +86,7 @@ class FCOSHead(nn.Module):
                 kernel_size=3,
                 stride=1,
                 padding=1,
-                bias=True
+                bias=True,
             )
         )
         bbox_tower.append(nn.GroupNorm(32, conv_channels))
@@ -77,8 +95,7 @@ class FCOSHead(nn.Module):
         self.bbox_pred = nn.Conv2d(conv_channels, 4, 3, padding=1)
 
         # initialization
-        for modules in [self.bbox_tower,
-                        self.bbox_pred]:
+        for modules in [self.bbox_tower, self.bbox_pred]:
             for l in modules.modules():
                 if isinstance(l, nn.Conv2d):
                     torch.nn.init.normal_(l.weight, std=0.01)
@@ -99,8 +116,8 @@ FLIP_TOP_BOTTOM = 1
 
 
 class BoxList:
-    def __init__(self, box, image_size, mode='xyxy'):
-        device = box.device if hasattr(box, 'device') else 'cpu'
+    def __init__(self, box, image_size, mode="xyxy"):
+        device = box.device if hasattr(box, "device") else "cpu"
         if torch.is_tensor(box):
             box = torch.as_tensor(box, dtype=torch.float32, device=device)
         else:
@@ -118,11 +135,11 @@ class BoxList:
 
         x_min, y_min, x_max, y_max = self.split_to_xyxy()
 
-        if mode == 'xyxy':
+        if mode == "xyxy":
             box = torch.cat([x_min, y_min, x_max, y_max], -1)
             box = BoxList(box, self.size, mode=mode)
 
-        elif mode == 'xywh':
+        elif mode == "xywh":
             remove = 1
             box = torch.cat(
                 [x_min, y_min, x_max - x_min + remove, y_max - y_min + remove], -1
@@ -140,23 +157,23 @@ class BoxList:
     def area(self):
         box = self.box
 
-        if self.mode == 'xyxy':
+        if self.mode == "xyxy":
             remove = 1
 
             area = (box[:, 2] - box[:, 0] + remove) * (box[:, 3] - box[:, 1] + remove)
 
-        elif self.mode == 'xywh':
+        elif self.mode == "xywh":
             area = box[:, 2] * box[:, 3]
 
         return area
 
     def split_to_xyxy(self):
-        if self.mode == 'xyxy':
+        if self.mode == "xyxy":
             x_min, y_min, x_max, y_max = self.box.split(1, dim=-1)
 
             return x_min, y_min, x_max, y_max
 
-        elif self.mode == 'xywh':
+        elif self.mode == "xywh":
             remove = 1
             x_min, y_min, w, h = self.box.split(1, dim=-1)
 
@@ -201,7 +218,7 @@ class BoxList:
         scaled_y_min = y_min * ratio_h
         scaled_y_max = y_max * ratio_h
         scaled = torch.cat([scaled_x_min, scaled_y_min, scaled_x_max, scaled_y_max], -1)
-        box = BoxList(scaled, size, mode='xyxy')
+        box = BoxList(scaled, size, mode="xyxy")
 
         for k, v in self.fields.items():
             if not isinstance(v, torch.Tensor):
@@ -235,7 +252,7 @@ class BoxList:
         box = BoxList(self.box.to(device), self.size, self.mode)
 
         for k, v in self.fields.items():
-            if hasattr(v, 'to'):
+            if hasattr(v, "to"):
                 v = v.to(device)
 
             box.fields[k] = v
@@ -244,7 +261,7 @@ class BoxList:
 
 
 def remove_small_box(boxlist, min_size):
-    box = boxlist.convert('xywh').box
+    box = boxlist.convert("xywh").box
     _, _, w, h = box.unbind(dim=1)
     keep = (w >= min_size) & (h >= min_size)
     keep = keep.nonzero().squeeze(1)
@@ -257,7 +274,7 @@ def boxlist_nms(boxlist, scores, threshold, max_proposal=-1):
         return boxlist
 
     mode = boxlist.mode
-    boxlist = boxlist.convert('xyxy')
+    boxlist = boxlist.convert("xyxy")
     box = boxlist.box
     keep = ops.nms(box, scores, threshold)
 

@@ -11,21 +11,21 @@ from .feat_comparison import Feature_Transform
 class COTR(nn.Module):
 
     def __init__(
-            self,
-            image_size: int,
-            num_encoder_layers: int,
-            num_decoder_layers: int,
-            num_objects: int,
-            emb_dim: int,
-            kernel_dim: int,
-            backbone_name: str,
-            swav_backbone: bool,
-            train_backbone: bool,
-            reduction: int,
-            use_query_pos_emb: bool,
-            zero_shot: bool,
-            use_objectness: bool,
-            use_appearance: bool
+        self,
+        image_size: int,
+        num_encoder_layers: int,
+        num_decoder_layers: int,
+        num_objects: int,
+        emb_dim: int,
+        kernel_dim: int,
+        backbone_name: str,
+        swav_backbone: bool,
+        train_backbone: bool,
+        reduction: int,
+        use_query_pos_emb: bool,
+        zero_shot: bool,
+        use_objectness: bool,
+        use_appearance: bool,
     ):
 
         super(COTR, self).__init__()
@@ -43,8 +43,12 @@ class COTR(nn.Module):
         self.use_appearance = use_appearance
         self.cosine_sim = nn.CosineSimilarity()
         self.backbone = Backbone(
-            backbone_name, pretrained=True, dilation=False, reduction=reduction,
-            swav=swav_backbone, requires_grad=train_backbone
+            backbone_name,
+            pretrained=True,
+            dilation=False,
+            reduction=reduction,
+            swav=swav_backbone,
+            requires_grad=train_backbone,
         )
         self.cos_loss = nn.CosineEmbeddingLoss(margin=0.0)
         self.feat_comp = Feature_Transform()
@@ -54,21 +58,34 @@ class COTR(nn.Module):
         backbone_features = self.backbone(x).detach()
         bs, _, bb_h, bb_w = backbone_features.size()
 
-        bboxes_ = torch.cat([
-            torch.arange(
-                bs, requires_grad=False
-            ).to(bboxes.device).repeat_interleave(bboxes.shape[1]).reshape(-1, 1),
-            bboxes.flatten(0, 1),
-        ], dim=1)
+        bboxes_ = torch.cat(
+            [
+                torch.arange(bs, requires_grad=False)
+                .to(bboxes.device)
+                .repeat_interleave(bboxes.shape[1])
+                .reshape(-1, 1),
+                bboxes.flatten(0, 1),
+            ],
+            dim=1,
+        )
 
-        feat_vectors = roi_align(
-            backbone_features,
-            boxes=bboxes_, output_size=self.kernel_dim,
-            spatial_scale=1.0 / self.reduction, aligned=True
-        ).permute(0, 2, 3, 1).reshape(
-            bs, 6, 3, 3, -1
-        ).permute(0, 1, 4, 2, 3)
-        feat_pairs = self.feat_comp(feat_vectors.reshape(bs * 6, 3584, 3, 3)).reshape(bs, 6, -1).permute(1, 0, 2)
+        feat_vectors = (
+            roi_align(
+                backbone_features,
+                boxes=bboxes_,
+                output_size=self.kernel_dim,
+                spatial_scale=1.0 / self.reduction,
+                aligned=True,
+            )
+            .permute(0, 2, 3, 1)
+            .reshape(bs, 6, 3, 3, -1)
+            .permute(0, 1, 4, 2, 3)
+        )
+        feat_pairs = (
+            self.feat_comp(feat_vectors.reshape(bs * 6, 3584, 3, 3))
+            .reshape(bs, 6, -1)
+            .permute(1, 0, 2)
+        )
         sim = list()
         class_ = []
         loss = torch.tensor(0.0).to(feat_pairs.device)
@@ -99,5 +116,5 @@ def build_model(args):
         reduction=args.reduction,
         use_query_pos_emb=args.use_query_pos_emb,
         use_objectness=args.use_objectness,
-        use_appearance=args.use_appearance
+        use_appearance=args.use_appearance,
     )

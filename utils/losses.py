@@ -79,10 +79,10 @@ class IOULoss(nn.Module):
 
         ious = (area_intersect + 1) / (area_union + 1)
 
-        if self.loc_loss_type == 'iou':
+        if self.loc_loss_type == "iou":
             loss = -torch.log(ious)
 
-        elif self.loc_loss_type == 'giou':
+        elif self.loc_loss_type == "giou":
             g_w_intersect = torch.max(pred_left, target_left) + torch.max(
                 pred_right, target_right
             )
@@ -108,38 +108,44 @@ class Criterion(nn.Module):
         super(Criterion, self).__init__()
 
         losses = dict()
-        losses['dmap'] = ObjectNormalizedL2Loss() if args.normalized_l2 else nn.MSELoss(reduction='sum')
+        losses["dmap"] = (
+            ObjectNormalizedL2Loss()
+            if args.normalized_l2
+            else nn.MSELoss(reduction="sum")
+        )
         if args.count_loss_weight > 0:
-            losses['count'] = CountLoss()
+            losses["count"] = CountLoss()
         if args.min_count_loss_weight > 0 and not args.zero_shot:
-            losses['min_count'] = MinCountLoss()
+            losses["min_count"] = MinCountLoss()
 
         self.aux = aux
         self.aux_weight = args.aux_weight
         self.losses = losses
         self.reduction = args.reduction
         self.weights = {
-            'dmap': 1,
-            'count': args.count_loss_weight,
-            'min_count': args.min_count_loss_weight
+            "dmap": 1,
+            "count": args.count_loss_weight,
+            "min_count": args.min_count_loss_weight,
         }
 
     def forward(self, output, density_map, bboxes, num_objects=None):
         losses = dict()
-        if 'dmap' in self.losses:
+        if "dmap" in self.losses:
             if num_objects is not None:
-                losses['dmap'] = self.losses['dmap'](output, density_map, num_objects)
+                losses["dmap"] = self.losses["dmap"](output, density_map, num_objects)
             else:
-                losses['dmap'] = self.losses['dmap'](output, density_map)
-        if 'count' in self.losses:
-            losses['count'] = self.losses['count'](output, density_map)
-        if 'min_count' in self.losses:
-            losses['min_count'] = self.losses['min_count'](output, bboxes)
+                losses["dmap"] = self.losses["dmap"](output, density_map)
+        if "count" in self.losses:
+            losses["count"] = self.losses["count"](output, density_map)
+        if "min_count" in self.losses:
+            losses["min_count"] = self.losses["min_count"](output, bboxes)
 
         if not self.aux:
             losses = {k: v * self.weights[k] for k, v in losses.items()}
         else:
-            losses = {k: self.aux_weight * v * self.weights[k] for k, v in losses.items()}
+            losses = {
+                k: self.aux_weight * v * self.weights[k] for k, v in losses.items()
+            }
 
         return losses
 
@@ -147,7 +153,7 @@ class Criterion(nn.Module):
 class Detection_criterion(nn.Module):
 
     def __init__(
-            self, sizes, iou_loss_type, center_sample, fpn_strides, pos_radius, aux=False
+        self, sizes, iou_loss_type, center_sample, fpn_strides, pos_radius, aux=False
     ):
         super().__init__()
 
@@ -183,7 +189,9 @@ class Detection_criterion(nn.Module):
 
         for level in range(len(points)):
             label_level_first.append(
-                torch.cat([label_per_img[level] for label_per_img in label], 0).to(points[0].device)
+                torch.cat([label_per_img[level] for label_per_img in label], 0).to(
+                    points[0].device
+                )
             )
             box_target_level_first.append(
                 torch.cat(
@@ -244,14 +252,14 @@ class Detection_criterion(nn.Module):
         return is_in_boxes
 
     def compute_target_for_location(
-            self, locations, targets, sizes_of_interest, n_point_per_level
+        self, locations, targets, sizes_of_interest, n_point_per_level
     ):
         labels = []
         box_targets = []
         xs, ys = locations[:, 0], locations[:, 1]
         for i in range(len(targets)):
             targets_per_img = targets[i]
-            assert targets_per_img.mode == 'xyxy'
+            assert targets_per_img.mode == "xyxy"
             bboxes = targets_per_img.box
 
             labels_per_img = torch.tensor([1, 1, 1, 1, 1, 1]).to(locations.device)
@@ -275,8 +283,8 @@ class Detection_criterion(nn.Module):
             max_box_targets_per_img = box_targets_per_img.max(2)[0]
 
             is_cared_in_level = (
-                                        max_box_targets_per_img >= sizes_of_interest[:, [0]]
-                                ) & (max_box_targets_per_img <= sizes_of_interest[:, [1]])
+                max_box_targets_per_img >= sizes_of_interest[:, [0]]
+            ) & (max_box_targets_per_img <= sizes_of_interest[:, [1]])
 
             locations_to_gt_area = area[None].repeat(len(locations), 1)
             locations_to_gt_area[is_in_boxes == 0] = INF
@@ -288,7 +296,9 @@ class Detection_criterion(nn.Module):
                 range(len(locations)), locations_to_gt_id
             ]
 
-            labels_per_img = labels_per_img.to(locations_to_gt_id.device)[locations_to_gt_id]
+            labels_per_img = labels_per_img.to(locations_to_gt_id.device)[
+                locations_to_gt_id
+            ]
             labels_per_img[locations_to_min_area == INF] = 0
 
             labels.append(labels_per_img)
@@ -300,7 +310,7 @@ class Detection_criterion(nn.Module):
         left_right = box_targets[:, [0, 2]]
         top_bottom = box_targets[:, [1, 3]]
         centerness = (left_right.min(-1)[0] / left_right.max(-1)[0]) * (
-                top_bottom.min(-1)[0] / top_bottom.max(-1)[0]
+            top_bottom.min(-1)[0] / top_bottom.max(-1)[0]
         )
 
         return torch.sqrt(centerness)
@@ -373,7 +383,10 @@ def single_image_mAP(preds, gts, iou_threshold=0.5):
         # training idx as detection
         best_iou = 0
         for idx, gt_box in enumerate(gt_boxes):
-            iou = intersection_over_union(np.array(pred_box), np.array(gt_box), )
+            iou = intersection_over_union(
+                np.array(pred_box),
+                np.array(gt_box),
+            )
             if iou > best_iou:
                 best_iou = iou
                 best_gt_idx = idx
@@ -398,27 +411,19 @@ def single_image_mAP(preds, gts, iou_threshold=0.5):
 
 
 def intersection_over_union(box1, box2):
-    bb1 = {'x1': box1[0],
-           'x2': box1[2],
-           'y1': box1[1],
-           'y2': box1[3]
-           }
-    bb2 = {'x1': box2[0],
-           'x2': box2[2],
-           'y1': box2[1],
-           'y2': box2[3]
-           }
+    bb1 = {"x1": box1[0], "x2": box1[2], "y1": box1[1], "y2": box1[3]}
+    bb2 = {"x1": box2[0], "x2": box2[2], "y1": box2[1], "y2": box2[3]}
 
-    assert bb1['x1'] < bb1['x2']
-    assert bb1['y1'] < bb1['y2']
-    assert bb2['x1'] < bb2['x2']
-    assert bb2['y1'] < bb2['y2']
+    assert bb1["x1"] < bb1["x2"]
+    assert bb1["y1"] < bb1["y2"]
+    assert bb2["x1"] < bb2["x2"]
+    assert bb2["y1"] < bb2["y2"]
 
     # determine the coordinates of the intersection rectangle
-    x_left = max(bb1['x1'], bb2['x1'])
-    y_top = max(bb1['y1'], bb2['y1'])
-    x_right = min(bb1['x2'], bb2['x2'])
-    y_bottom = min(bb1['y2'], bb2['y2'])
+    x_left = max(bb1["x1"], bb2["x1"])
+    y_top = max(bb1["y1"], bb2["y1"])
+    x_right = min(bb1["x2"], bb2["x2"])
+    y_bottom = min(bb1["y2"], bb2["y2"])
 
     if x_right < x_left or y_bottom < y_top:
         return 0.0
@@ -428,8 +433,8 @@ def intersection_over_union(box1, box2):
     intersection_area = (x_right - x_left) * (y_bottom - y_top)
 
     # compute the area of both AABBs
-    bb1_area = (bb1['x2'] - bb1['x1']) * (bb1['y2'] - bb1['y1'])
-    bb2_area = (bb2['x2'] - bb2['x1']) * (bb2['y2'] - bb2['y1'])
+    bb1_area = (bb1["x2"] - bb1["x1"]) * (bb1["y2"] - bb1["y1"])
+    bb2_area = (bb2["x2"] - bb2["x1"]) * (bb2["y2"] - bb2["y1"])
 
     # compute the intersection over union by taking the intersection
     # area and dividing it by the sum of prediction + ground-truth
