@@ -1,17 +1,6 @@
-# DAVE – A Detect-and-Verify Paradigm for Low-Shot Counting
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/dave-a-detect-and-verify-paradigm-for-low/few-shot-object-counting-and-detection-on)](https://paperswithcode.com/sota/few-shot-object-counting-and-detection-on?p=dave-a-detect-and-verify-paradigm-for-low)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/dave-a-detect-and-verify-paradigm-for-low/object-counting-on-fsc147)](https://paperswithcode.com/sota/object-counting-on-fsc147?p=dave-a-detect-and-verify-paradigm-for-low)
-
-
-This repository holds the official Pytorch implementation for the paper [DAVE – A Detect-and-Verify Paradigm for Low-Shot Counting](https://arxiv.org/pdf/2404.16622) accepted at CVPR 2024.
-
-![](material/arch.png)
-
-
-## Abstract
-Low-shot counters estimate the number of objects corresponding to a selected category, based on only few or no exemplars annotated in the image. The current state-of-the-art estimates the total counts as the sum over the object location density map, but does not provide individual object locations and sizes, which are crucial for many applications. This is addressed by detection-based counters, which, however fall behind in the total count accuracy. Furthermore, both approaches tend to overestimate the counts in the presence of other object classes due to many false positives. We propose DAVE, a low-shot counter based on a detect-and-verify paradigm, that avoids the aforementioned issues by first generating a high-recall detection set and then verifying the detections to identify and remove the outliers. This jointly increases the recall and precision, leading to accurate counts. DAVE outperforms the top density-based counters by  20% in the total count MAE, it outperforms the most recent detection-based counter by 20% in detection quality and sets a new state-of-the-art in zero-shot as well as text-prompt-based counting.
-
-![](material/qualitative.png)
+# Detectron2 Installation
+1. change `>=3.9` in detectron2/setup.py to `>=3.8`
+2. prepare `nvcc 11.8`, `gcc-11` (a whole package). Install with pip. Ensure the install script use the prepared compilers (`build.ninja` file).
 
 # DAVE Installation Guide
 
