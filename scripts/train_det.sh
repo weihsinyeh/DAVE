@@ -23,7 +23,7 @@ export NCCL_DEBUG=INFO
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 export CUDA_LAUNCH_BLOCKING=1
 
-torchrun --nproc_per_node=1 ./train_det.py \
+CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 ./train_det.py \
 --model_name base_3_shot \
 --det_model_name DAVE_3_shot \
 --data_path /project/g/r13922043/dave_dataset/FSC147 \
