@@ -1,18 +1,7 @@
-#!/bin/bash
-
-#SBATCH --job-name=similarity_train
-#SBATCH --output=similarity_train.txt
-#SBATCH --error=similarity_train.txt
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=2
-#SBATCH --cpus-per-task=12
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:2
-#SBATCH --time=4-00:00:00
-
-
-master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-export MASTER_ADDR=$master_addr
+export WORLD_SIZE=1
+export LOCAL_RANK=0
+export RANK=1
+export MASTER_ADDR=$(hostname -s)
 export MASTER_PORT=50194
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
@@ -20,16 +9,12 @@ export NCCL_BLOCKING_WAIT=1
 export NCCL_DEBUG=INFO
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 export CUDA_LAUNCH_BLOCKING=1
-module load Anaconda3
-source activate cotr
-conda activate base
-conda activate cotr
 
-srun python ../train_similarity.py \
+CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 ./train_similarity.py \
 --model_name base_3_shot \
 --det_model_name verification \
---data_path /d/hpc/projects/FRI/pelhanj/fsc147 \
---model_path /d/hpc/projects/FRI/pelhanj/ \
+--data_path /project/g/r13922043/dave_dataset/FSC147 \
+--model_path material/ \
 --backbone resnet50 \
 --swav_backbone \
 --reduction 8 \

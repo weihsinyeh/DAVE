@@ -10,8 +10,11 @@
 #SBATCH --time=4-00:00:00
 
 
-master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-export MASTER_ADDR=$master_addr
+#master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
+export WORLD_SIZE=1
+export LOCAL_RANK=0 
+export RANK=1
+export MASTER_ADDR=$(hostname -s)
 export MASTER_PORT=50195
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
@@ -20,16 +23,11 @@ export NCCL_DEBUG=INFO
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 export CUDA_LAUNCH_BLOCKING=1
 
-module load Anaconda3
-source activate cotr
-conda activate base
-conda activate cotr
-
-srun python ../train_det.py \
+torchrun --nproc_per_node=1 ./train_det.py \
 --model_name base_3_shot \
 --det_model_name DAVE_3_shot \
---data_path /d/hpc/projects/FRI/pelhanj/fsc147 \
---model_path /d/hpc/projects/FRI/pelhanj/ \
+--data_path /project/g/r13922043/dave_dataset/FSC147 \
+--model_path material/ \
 --backbone resnet50 \
 --swav_backbone \
 --reduction 8 \
@@ -43,7 +41,7 @@ srun python ../train_det.py \
 --lr 1e-4 \
 --lr_drop 10 \
 --weight_decay 1e-3 \
---batch_size 2 \
+--batch_size 1 \
 --dropout 0.1 \
 --num_workers 8 \
 --max_grad_norm 0.1 \

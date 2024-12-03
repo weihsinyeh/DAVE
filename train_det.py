@@ -69,7 +69,7 @@ def train(args):
     if args.skip_train:
         print("SKIPPING TRAIN")
         return
-
+    '''
     if 'SLURM_PROCID' in os.environ:
         world_size = int(os.environ['SLURM_NTASKS'])
         rank = int(os.environ['SLURM_PROCID'])
@@ -79,23 +79,16 @@ def train(args):
         world_size = int(os.environ['WORLD_SIZE'])
         rank = int(os.environ['RANK'])
         gpu = int(os.environ['LOCAL_RANK'])
+    '''
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    torch.cuda.set_device(gpu)
-    device = torch.device(gpu)
 
-    dist.init_process_group(
-        backend='nccl', init_method='env://',
-        world_size=world_size, rank=rank
-    )
 
     assert args.backbone in ['resnet18', 'resnet50', 'resnet101']
     assert args.reduction in [4, 8, 16]
 
-    model = DistributedDataParallel(
-        build_model(args).to(device),
-        device_ids=[gpu],
-        output_device=gpu
-    )
+    model = build_model(args).to(device)
 
     model.load_state_dict(
         torch.load(os.path.join(args.model_path, args.model_name + '.pth'))['model'], strict=False
@@ -276,13 +269,7 @@ def train(args):
                     density_map.flatten(1).sum(dim=1) - outR.flatten(1).sum(dim=1)
                 ).sum()
 
-        train_losses = reduce_dict(train_losses)
-        val_losses = reduce_dict(val_losses)
-        aux_train_losses = reduce_dict(aux_train_losses)
-        aux_val_losses = reduce_dict(aux_val_losses)
-        dist.all_reduce_multigpu([train_ae])
-        dist.all_reduce_multigpu([val_ae])
-        dist.all_reduce_multigpu([mAP])
+        
 
         scheduler.step()
 
