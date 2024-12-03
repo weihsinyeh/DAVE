@@ -12,7 +12,7 @@ def get_argparser():
     )
     parser.add_argument(
         '--model_path',
-        default='material/',
+        default='/project/g/r13922043/dave_model',
         type=str
     )
     parser.add_argument('--det_model_name', default='DAVE', type=str)
