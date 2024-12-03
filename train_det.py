@@ -66,24 +66,12 @@ def reduce_dict(input_dict, average=False):
 
 
 def train(args):
+
     if args.skip_train:
         print("SKIPPING TRAIN")
         return
-    '''
-    if 'SLURM_PROCID' in os.environ:
-        world_size = int(os.environ['SLURM_NTASKS'])
-        rank = int(os.environ['SLURM_PROCID'])
-        gpu = rank % torch.cuda.device_count()
-        print("Running on SLURM", world_size, rank, gpu)
-    else:
-        world_size = int(os.environ['WORLD_SIZE'])
-        rank = int(os.environ['RANK'])
-        gpu = int(os.environ['LOCAL_RANK'])
-    '''
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
 
     assert args.backbone in ['resnet18', 'resnet50', 'resnet101']
     assert args.reduction in [4, 8, 16]
@@ -159,20 +147,20 @@ def train(args):
     )
     train_loader = DataLoader(
         train,
-        sampler=DistributedSampler(train),
+        shuffle=True,
         batch_size=args.batch_size,
         drop_last=True,
         num_workers=args.num_workers
     )
     val_loader = DataLoader(
         val,
-        sampler=DistributedSampler(val),
+        shuffle=False,
         batch_size=args.batch_size,
         drop_last=False,
         num_workers=args.num_workers
     )
     print("NUM STEPS", len(train_loader) * args.epochs)
-    print(rank, len(train_loader))
+ 
     for epoch in range(start_epoch + 1, args.epochs + 1):
         start = perf_counter()
         train_losses = {k: torch.tensor(0.0).to(device) for k in criterion.losses.keys()}
@@ -183,7 +171,7 @@ def train(args):
         val_ae = torch.tensor(0.0).to(device)
         mAP = torch.tensor(0.0).to(device)
 
-        train_loader.sampler.set_epoch(epoch)
+        
         model.train()
 
         for img, bboxes, density_map, ids, scale_x, scale_y, _ in train_loader:
@@ -194,15 +182,15 @@ def train(args):
                 (args.fcos_pred_size, args.fcos_pred_size))
             targets.fields['labels'] = [1 for __ in range(args.batch_size * 2)]
             optimizer.zero_grad()
+            print("HIHIHI222222222")
             outR, aux_R, tblr, location = model(img, bboxes)
-
+            print("HIHIHI")
             if args.normalized_l2:
                 with torch.no_grad():
                     num_objects = density_map.sum()
-                    dist.all_reduce_multigpu([num_objects])
             else:
                 num_objects = None
-
+            print("HIHIHI")
             main_losses = criterion(outR, density_map, bboxes, num_objects)
             aux_losses = [
                 aux_criterion(aux, density_map, bboxes, num_objects) for aux in aux_R
@@ -273,38 +261,37 @@ def train(args):
 
         scheduler.step()
 
-        if rank == 0:
-            end = perf_counter()
-            best_epoch = False
+        end = perf_counter()
+        best_epoch = False
 
-            if mAP > best_mAP:
-                best_mAP = mAP
-                checkpoint = {
+        if mAP > best_mAP:
+            best_mAP = mAP
+            checkpoint = {
                     'epoch': epoch,
                     'model': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict(),
                     'best_val_ae': val_ae.item() / len(val)
-                }
-                torch.save(
+            }
+            torch.save(
                     checkpoint,
                     os.path.join(args.model_path, f'{args.det_model_name}.pth')
-                )
-                best_epoch = True
-
-            print("Epoch", epoch)
-            print({k: v.item() / len(train) for k, v in train_losses.items()})
-            print({k: v.item() / len(val) for k, v in val_losses.items()})
-            print({k: v.item() / len(train) for k, v in aux_train_losses.items()})
-            print({k: v.item() / len(val) for k, v in aux_val_losses.items()})
-            print(
-                train_ae.item() / len(train),
-                val_ae.item() / len(val),
-                end - start,
-                'best' if best_epoch else '',
             )
-            print("det_sc:", mAP / len(val))
-            print("********")
+            best_epoch = True
+
+        print("Epoch", epoch)
+        print({k: v.item() / len(train) for k, v in train_losses.items()})
+        print({k: v.item() / len(val) for k, v in val_losses.items()})
+        print({k: v.item() / len(train) for k, v in aux_train_losses.items()})
+        print({k: v.item() / len(val) for k, v in aux_val_losses.items()})
+        print(
+            train_ae.item() / len(train),
+            val_ae.item() / len(val),
+            end - start,
+            'best' if best_epoch else '',
+        )
+        print("det_sc:", mAP / len(val))
+        print("********")
 
     if args.skip_test:
         dist.destroy_process_group()

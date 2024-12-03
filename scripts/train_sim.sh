@@ -8,7 +8,7 @@ export NCCL_IB_DISABLE=1
 export NCCL_BLOCKING_WAIT=1
 export NCCL_DEBUG=INFO
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
-export CUDA_LAUNCH_BLOCKING=1
+export CUDA_LAUNCH_BLOCKING=0
 
 CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 ./train_similarity.py \
 --model_name base_3_shot \

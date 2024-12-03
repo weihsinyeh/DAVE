@@ -1,29 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=DAVE_3shot
-#SBATCH --output=DAVE_3shot.txt
-#SBATCH --error=DAVE_3shot.txt
-#SBATCH --nodes=2
-#SBATCH --ntasks-per-node=2
-#SBATCH --cpus-per-task=12
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:2
-#SBATCH --time=4-00:00:00
-
-
-#master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-export WORLD_SIZE=1
-export LOCAL_RANK=0 
-export RANK=1
-export MASTER_ADDR=$(hostname -s)
-export MASTER_PORT=50195
-export NCCL_P2P_DISABLE=1
-export NCCL_IB_DISABLE=1
-export NCCL_BLOCKING_WAIT=1
 export NCCL_DEBUG=INFO
-export TORCH_DISTRIBUTED_DEBUG=DETAIL
-export CUDA_LAUNCH_BLOCKING=1
-
-CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 ./train_det.py \
+export NCCL_IB_DISABLE=1
+export NCCL_NET_GDR_DISABLE=1
+export NCCL_P2P_DISABLE=1
+CUDA_VISIBLE_DEVICES=0 python ./train_det.py \
 --model_name base_3_shot \
 --det_model_name DAVE_3_shot \
 --data_path /project/g/r13922043/dave_dataset/FSC147 \

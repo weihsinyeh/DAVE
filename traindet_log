@@ -1,1 +1,9 @@
 Namespace(aux_weight=0.3, backbone='resnet50', backbone_lr=0, batch_size=1, count_loss_weight=0.0, d_s=1.0, d_t=3, data_path='/project/g/r13922043/dave_dataset/FSC147', dataset='fsc147', det_model_name='DAVE_3_shot', det_train=True, detection_loss_weight=0.01, dropout=0.1, egv=0.132, emb_dim=256, epochs=50, eval_multicat=False, fcos_pred_size=512, i_thr=0.55, image_size=512, kernel_dim=3, lr=0.0001, lr_drop=10, m_s=0.0, max_grad_norm=0.1, min_count_loss_weight=0.0, model_name='base_3_shot', model_path='material/', norm_s=False, normalized_l2=True, num_dec_layers=3, num_enc_layers=3, num_heads=8, num_objects=3, num_workers=8, orig_dmaps=False, pre_norm=True, prompt_shot=False, reduction=8, resume_training=False, s_t=0.008, skip_cars=False, skip_test=False, skip_train=False, swav_backbone=True, task='fscd147', tiling_p=0.5, unseen=False, use_appearance=True, use_objectness=True, use_query_pos_emb=True, weight_decay=0.001, zero_shot=False)
+3659
+1286
+loading annotations into memory...
+Done (t=0.36s)
+creating index...
+index created!
+NUM STEPS 182950
+HIHIHI222222222
