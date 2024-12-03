@@ -182,15 +182,15 @@ def train(args):
                 (args.fcos_pred_size, args.fcos_pred_size))
             targets.fields['labels'] = [1 for __ in range(args.batch_size * 2)]
             optimizer.zero_grad()
-            print("HIHIHI222222222")
+
             outR, aux_R, tblr, location = model(img, bboxes)
-            print("HIHIHI")
+
             if args.normalized_l2:
                 with torch.no_grad():
                     num_objects = density_map.sum()
             else:
                 num_objects = None
-            print("HIHIHI")
+
             main_losses = criterion(outR, density_map, bboxes, num_objects)
             aux_losses = [
                 aux_criterion(aux, density_map, bboxes, num_objects) for aux in aux_R

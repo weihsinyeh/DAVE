@@ -132,3 +132,5 @@ MNIST
 
 *.pth
 *.json
+
+train_det_log
