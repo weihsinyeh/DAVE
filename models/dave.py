@@ -19,6 +19,8 @@ from .feat_comparison import Feature_Transform
 from .positional_encoding import PositionalEncodingsFixed
 from .regression_head import DensityMapRegressor
 from .transformer import TransformerEncoder, TransformerDecoder
+from copy import deepcopy
+import time
 
 
 class COTR(nn.Module):
@@ -112,6 +114,7 @@ class COTR(nn.Module):
                 activation,
                 norm,
             )
+            self.encoder_cpu = None
 
         if num_decoder_layers > 0:
             self.decoder = TransformerDecoder(
@@ -135,6 +138,7 @@ class COTR(nn.Module):
             ]
         )
         self.box_predictor = FCOSHead(3584)
+        self.box_predictor_cpu = None
         self.idx = 0
 
         self.pos_emb = PositionalEncodingsFixed(emb_dim)
@@ -200,6 +204,7 @@ class COTR(nn.Module):
             b, l, r, t = tlrb[i]
 
             for x11, y11 in a:
+                # box is maximum point expanded by predicted top, bottom, left, right
                 box = [
                     y11 - b[x11][y11].item(),
                     x11 - l[x11][y11].item(),
@@ -298,13 +303,17 @@ class COTR(nn.Module):
         pos_emb = self.pos_emb(bs, h, w, src.device).flatten(2).permute(2, 0, 1)
         src = src.flatten(2).permute(2, 0, 1)
 
-        # push through the encoder
+        # push through the (transformer) encoder
         if self.num_encoder_layers > 0:
             if backbone_features.shape[2] * backbone_features.shape[3] > 6000:
+                start_time = time.time()
                 enc = self.encoder.cpu()
                 memory = enc(
                     src.cpu(), pos_emb.cpu(), src_key_padding_mask=None, src_mask=None
                 ).to(backbone_features.device)
+                enc.to(backbone_features.device)
+                end_time = time.time()
+                print(f"\t- encoding {end_time - start_time:.0f} seconds", flush=True)
             else:
                 memory = self.encoder(
                     src, pos_emb, src_key_padding_mask=None, src_mask=None
@@ -452,7 +461,7 @@ class COTR(nn.Module):
 
     def forward(self, x_img, bboxes, name="", dmap=None, classes=None):
         self.num_objects = bboxes.shape[1]
-        backbone_features = self.backbone(x_img)
+        backbone_features = self.backbone(x_img)  # (batch_size, 2048, H/32, W/32)
         bs, _, bb_h, bb_w = backbone_features.size()
 
         #####################
@@ -465,24 +474,31 @@ class COTR(nn.Module):
         )
 
         if self.det_train:
-            tblr = self.box_predictor(
+            tblr = self.box_predictor(  # Top, Bottom, Left, and Right
                 self.upscale(backbone_features), self.upscale(correlation_maps)
             )
             location = self.compute_location(tblr)
             return outputs_R[-1], outputs_R[:-1], tblr, location
 
         if backbone_features.shape[2] * backbone_features.shape[3] > 8000:
+            start_time = time.time()
             self.box_predictor = self.box_predictor.cpu()
             tblr = self.box_predictor(
                 self.upscale(backbone_features.cpu()),
                 self.upscale(correlation_maps.cpu()),
+            )
+            self.box_predictor = self.box_predictor.to(backbone_features.device)
+            end_time = time.time()
+            print(
+                f"\t- Predict boxes {end_time - start_time:.0f} seconds",
+                flush=True,
             )
         else:
             tblr = self.box_predictor(
                 self.upscale(backbone_features), self.upscale(correlation_maps)
             )
 
-        generated_bboxes = self.generate_bbox(outputR, tblr)[0]
+        generated_bboxes: BoxList = self.generate_bbox(outputR, tblr)[0]
         bboxes_p = generated_bboxes.box
 
         bboxes_pred = torch.cat(
@@ -502,7 +518,7 @@ class COTR(nn.Module):
         if not self.zero_shot:
             bboxes_ = torch.cat(
                 [
-                    torch.arange(bs, requires_grad=False)
+                    torch.arange(bs)
                     .to(bboxes.device)
                     .repeat_interleave(self.num_objects)
                     .reshape(-1, 1),
@@ -614,7 +630,7 @@ class COTR(nn.Module):
             return outputR, [], tblr, preds
 
         else:
-            dst_mtx[dst_mtx < 0] = 0
+            dst_mtx[dst_mtx < 0] = 0  # similarity matrix
 
             k, _, _ = self.eigenDecomposition(dst_mtx)
             exemplar_bboxes = generated_bboxes
@@ -625,13 +641,15 @@ class COTR(nn.Module):
                 spectral = SpectralClustering(
                     n_clusters=n_clusters_, affinity="precomputed"
                 )
-                labels = spectral.fit_predict(dst_mtx)
-                correct_class_labels = list(
+                labels = spectral.fit_predict(
+                    dst_mtx
+                )  # return each box's cluster label
+                correct_class_labels = list(  # first num_objects are the examples
                     np.unique(np.array(labels[: self.num_objects]))
                 )
 
-                for i in range(len(bboxes_p)):
-                    box = bboxes_p[i]
+                for i, box in enumerate(bboxes_p):
+                    # box = bboxes_p[i]
                     if (
                         box_iou(
                             box.unsqueeze(0), bboxes_[: self.num_objects][:, 1:].cpu()

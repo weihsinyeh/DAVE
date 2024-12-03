@@ -21,19 +21,14 @@ torch.manual_seed(0)
 random.seed(0)
 np.random.seed(0)
 import json
+import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 DATASETS = {
     "fsc_box": FSC147WithDensityMapSCALE2BOX,
     "fsc_downscale": FSC147WithDensityMapDOWNSIZE,
     "lvis": FSCD_LVIS_Dataset_SCALE,
 }
-
-import sys
-
-
-def log_imm(msg):
-    sys.stdout.write(msg)
-    sys.stdout.flush()
 
 
 @torch.no_grad()
@@ -61,7 +56,7 @@ def evaluate(args):
 
     for split in ["val", "test"]:
         print(split)
-        test = DATASETS["fsc_box"](
+        test: FSC147WithDensityMapSCALE2BOX = DATASETS["fsc_box"](
             args.data_path,
             args.image_size,
             split=split,
@@ -72,7 +67,7 @@ def evaluate(args):
 
         test_loader = DataLoader(
             test,
-            batch_size=args.batch_size,
+            batch_size=1,
             drop_last=False,
             num_workers=args.num_workers,
         )
@@ -91,46 +86,47 @@ def evaluate(args):
         num_objects = []
         for (
             img,
-            bboxes,
+            bboxes,  # examples only
             density_map,
-            ids,
+            ids,  # <class 'torch.Tensor'> tensor([i]) # caused by batch_size=1
             scale_x,
             scale_y,
             shape,
-        ) in test_loader:  # tqdm(test_loader):
-            model = model.to(
-                device
-            )  # because it move encoder to cpu if feature too big
+        ) in tqdm(test_loader):
+            # model = model.to(device)  # done in model
+            idx = ids[0].item()
             img = img.to(device)
             bboxes = bboxes.to(device)
-            density_map = density_map.to(device)
-            log_imm(f"Inferecing {shape} ")
-            out, aux, tblr, boxes_pred = model(
-                img, bboxes, test.image_names[ids[0].item()]
-            )
-            log_imm("Done! ")
+            # density_map = density_map.to(device)
+            # if shape[0] > 512 or shape[1] > 512:
+            #    print(f"Inferecing {ids[0]} {shape}", flush=True)
+            out, aux, tblr, boxes_pred = model(img, bboxes, test.image_names[idx])
+            # log_imm("Done! ")
             gt_bboxes, resize_factors = test.get_gt_bboxes(ids)
+            # print(f"{shape=}")
+            # print(f"{density_map.shape=}")
+            # print(f"{(scale_x, scale_y)=}")
+            # print(f"{resize_factors=}")
             boxes_pred = [boxes_pred]
 
             boxes_pred[0].box = boxes_pred[0].box / torch.tensor(
                 [scale_y[0], scale_x[0], scale_y[0], scale_x[0]]
             )
             boxes_pred[0].box = boxes_pred[0].box * resize_factors[0]
+            boxes_xyxy = boxes_pred[0].box.clone()
             areas = boxes_pred[0].area()
             boxes_xywh = boxes_pred[0].convert("xywh")
             img_info = {
-                "id": test.map_img_name_to_ori_id()[test.image_names[ids[0].item()]],
-                "file_name": "None",
+                "id": test.map_img_name_to_ori_id()[test.image_names[idx]],
+                # "file_name": "None",
             }
             scores = boxes_xywh.fields["scores"]
-            log_imm(f"#box: {len(boxes_pred[0].box)} ")
+            # log_imm(f"#box: {len(boxes_pred[0].box)} ")
             for i in range(len(boxes_pred[0].box)):
                 box = boxes_xywh.box[i]
                 anno = {
                     "id": anno_id,
-                    "image_id": test.map_img_name_to_ori_id()[
-                        test.image_names[ids[0].item()]
-                    ],
+                    "image_id": test.map_img_name_to_ori_id()[test.image_names[idx]],
                     "area": int(areas[0].item()),
                     "bbox": [
                         int(box[0].item()),
@@ -144,28 +140,78 @@ def evaluate(args):
                 anno_id += 1
                 predictions["annotations"].append(anno)
             predictions["images"].append(img_info)
-            err.append(
-                torch.abs(
-                    density_map.flatten(1).sum(dim=1)
-                    - out[:, :, : shape[1], : shape[2]].flatten(1).sum(dim=1)
-                ).item()
-            )
-            box_err.append(
-                abs(density_map.flatten(1).sum(dim=1).item() - len(boxes_pred[0].box))
-            )
-            num_objects.append(density_map.flatten(1).sum(dim=1).item())
-            ae += torch.abs(
-                density_map.flatten(1).sum(dim=1)
-                - out[:, :, : shape[1], : shape[2]].flatten(1).sum(dim=1)
-            ).sum()
-            se += (
-                (
-                    density_map.flatten(1).sum(dim=1)
-                    - out[:, :, : shape[1], : shape[2]].flatten(1).sum(dim=1)
+
+            # gt_dcnt = density_map.flatten(1).sum(dim=1).item()
+            gt_cnt = test.get_gt_count(idx)
+            pred_dcnt = out[:, :, : shape[1], : shape[2]].flatten(1).sum(dim=1).item()
+            # gt_dcnt = gt_cnt (possibly with float error)
+            # print(f"gt_dcnt: {gt_dcnt}")
+            # print(f"gt_bboxes: {len(gt_bboxes)}")
+            # print(f"gt_cnt: {gt_cnt}")
+            # not used after
+            # err.append(
+            #    torch.abs(
+            #       gt_dcnt - pred_dcnt
+            #    ).item()
+            # )
+            # box_err.append(abs(gt_dcnt - len(boxes_pred[0].box)))
+            # num_objects.append(density_map.flatten(1).sum(dim=1).item())
+            ae += gt_cnt - pred_dcnt
+            se += (gt_cnt - pred_dcnt) ** 2
+            # log_imm("Done!\n")
+
+            # visualize bounding boxes
+            image = test.get_image(idx)
+            plt.figure(figsize=(10, 10))
+            plt.imshow(image)
+
+            for i in range(len(boxes_xyxy)):
+                box = boxes_xyxy[i]
+                # print(box)
+                plt.plot(
+                    [box[0], box[0], box[2], box[2], box[0]],
+                    [box[1], box[3], box[3], box[1], box[1]],
+                    linewidth=1,
+                    color="red",
                 )
-                ** 2
-            ).sum()
-            log_imm("Done!\n")
+            for bbox in bboxes[0]:
+                bbox = (
+                    bbox.cpu()
+                    / torch.tensor(
+                        [scale_y[0], scale_x[0], scale_y[0], scale_x[0]]
+                    ).cpu()
+                    * resize_factors[0].cpu()
+                )
+                plt.plot(
+                    [bbox[0], bbox[0], bbox[2], bbox[2], bbox[0]],
+                    [bbox[1], bbox[3], bbox[3], bbox[1], bbox[1]],
+                    linewidth=2,
+                    color="blue",
+                )
+
+            # check if the gt_boxes are correct (fully overlappping)
+            # gt_bbox is not perfect
+            # for bbox in test.get_example_coordinates(idx):
+            #    plt.plot(
+            #        [bbox[0][0], bbox[1][0], bbox[2][0], bbox[3][0], bbox[0][0]],
+            #        [bbox[0][1], bbox[1][1], bbox[2][1], bbox[3][1], bbox[0][1]],
+            #        linewidth=1,
+            #        color="green",
+            #    )
+
+            plt.title(
+                "Dmap count: " + str(pred_dcnt) + " Box count: " + str(len(boxes_xyxy))
+            )
+            plt.savefig(f"output_images/bbox/{idx}.png")
+            plt.close()
+
+            # visualize density map (different shape)
+            density_np = out[:, :, : shape[1], : shape[2]].cpu().numpy()
+            plt.figure(figsize=(10, 10))
+            plt.imshow(density_np[0, 0], cmap="viridis")
+            # plt.colorbar()
+            plt.savefig(f"output_images/density/{idx}.png")
+            plt.close()
 
         print("END")
         print(
@@ -173,7 +219,7 @@ def evaluate(args):
             f"MAE {ae.item() / len(test)} RMSE {torch.sqrt(se / len(test)).item()}",
         )
 
-        with open("../DAVE_3_shot" + "_" + split + ".json", "w") as handle:
+        with open("./DAVE_3_shot" + "_" + split + ".json", "w") as handle:
             json.dump(predictions, handle)
 
 
