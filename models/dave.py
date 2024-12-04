@@ -551,7 +551,8 @@ class COTR(nn.Module):
 
         # Speed up, nothing changes
         if len(feat_pairs) > 500:
-            return outputR, [], tblr, generated_bboxes
+            outputR_no_mask = outputR.clone()
+            return outputR, outputR_no_mask, tblr, generated_bboxes
 
         # can be used to reduce memory consumption
         # dst_mtx = np.zeros((feat_pairs.shape[0], feat_pairs.shape[0]))
@@ -635,6 +636,7 @@ class COTR(nn.Module):
             k, _, _ = self.eigenDecomposition(dst_mtx)
             exemplar_bboxes = generated_bboxes
             mask = None
+            # print(f"{k=}")
             if len(k) > 1 or k[0] > 1:
 
                 n_clusters_ = max(k)
@@ -662,10 +664,11 @@ class COTR(nn.Module):
 
                 exemplar_bboxes = generated_bboxes[mask[self.num_objects :]]
 
+            outputR_no_mask = outputR.clone()
             if mask is not None and np.any(mask == False):
                 outputR[0][0] = mask_density(outputR[0], exemplar_bboxes)
 
-        return outputR, [], tblr, exemplar_bboxes
+        return outputR, outputR_no_mask, tblr, exemplar_bboxes
 
 
 def build_model(args):

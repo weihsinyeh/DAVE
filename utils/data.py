@@ -538,6 +538,9 @@ class FSC147WithDensityMapSCALE2BOX(Dataset):
             os.path.join(self.data_path, "images_384_VarV2", self.image_names[idx])
         )
 
+    def get_image_path(self, idx):
+        return os.path.join(self.data_path, "images_384_VarV2", self.image_names[idx])
+
     def get_gt_count(self, idx):
         return len(self.annotations[self.image_names[idx]]["points"])
 
