@@ -23,6 +23,7 @@ np.random.seed(0)
 import json
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
+import os
 
 DATASETS = {
     "fsc_box": FSC147WithDensityMapSCALE2BOX,
@@ -54,8 +55,15 @@ def evaluate(args):
     }
     model.module.feat_comp.load_state_dict(pretrained_dict_feat)
 
-    for split in ["val", "test"]:
+    for split in ["val","test"]:
         print(split)
+        density_dir = f"output_images/{split}/density"
+        bbox_dir = f"output_images/{split}/bbox"
+        if not os.path.exists(density_dir):
+            os.makedirs(density_dir)
+        if not os.path.exists(bbox_dir):
+            os.makedirs(bbox_dir)
+
         test: FSC147WithDensityMapSCALE2BOX = DATASETS["fsc_box"](
             args.data_path,
             args.image_size,
@@ -156,7 +164,7 @@ def evaluate(args):
             # )
             # box_err.append(abs(gt_dcnt - len(boxes_pred[0].box)))
             # num_objects.append(density_map.flatten(1).sum(dim=1).item())
-            ae += gt_cnt - pred_dcnt
+            ae += abs(gt_cnt - pred_dcnt)
             se += (gt_cnt - pred_dcnt) ** 2
             # log_imm("Done!\n")
 
@@ -202,7 +210,7 @@ def evaluate(args):
             plt.title(
                 "Dmap count: " + str(pred_dcnt) + " Box count: " + str(len(boxes_xyxy))
             )
-            plt.savefig(f"output_images/bbox/{idx}.png")
+            plt.savefig(f"{bbox_dir}/{idx}.png")
             plt.close()
 
             # visualize density map (different shape)
@@ -210,7 +218,7 @@ def evaluate(args):
             plt.figure(figsize=(10, 10))
             plt.imshow(density_np[0, 0], cmap="viridis")
             # plt.colorbar()
-            plt.savefig(f"output_images/density/{idx}.png")
+            plt.savefig(f"{density_dir}/{idx}.png")
             plt.close()
 
         print("END")

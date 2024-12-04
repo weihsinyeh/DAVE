@@ -1,5 +1,6 @@
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=`python -m get_gpu`
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 python3 /tmp2/b10902118/DAVE/main.py \
 --skip_train \
 --data_path /tmp2/b10902118/fsc \
