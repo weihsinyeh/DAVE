@@ -211,26 +211,18 @@ class COTR(nn.Module):
                     y11 + r[x11][y11].item(),
                     x11 + t[x11][y11].item(),
                 ]
+                # print(f"{box=}")
+                x0, y0 = max(0, int(box[0])), max(0, int(box[1]))
+                x1, y1 = min(dmap.shape[0], int(box[2])), min(
+                    dmap.shape[1], int(box[3])
+                )
+                if x1 <= x0 or y1 <= y0:
+                    continue
+                density_slice = density[y0:y1, x0:x1]
                 boxes.append(box)
                 scores.append(
-                    (
-                        1
-                        - math.fabs(
-                            density[
-                                max(0, int(box[1])) : min(int(box[3]), dmap.shape[0]),
-                                max(int(box[0]), 0) : min(int(box[2]), dmap.shape[1]),
-                            ].sum()
-                            - 1
-                        )
-                    )
-                    * self.d_s
-                    + density[
-                        max(0, int(box[1])) : min(int(box[3]), dmap.shape[0]),
-                        max(int(box[0]), 0) : min(int(box[2]), dmap.shape[1]),
-                    ]
-                    .max()
-                    .item()
-                    * self.m_s
+                    (1 - math.fabs(density_slice.sum() - 1)) * self.d_s
+                    + density_slice.max().item() * self.m_s
                 )
 
             b = BoxList(list(boxes), (density_map.shape[3], density_map.shape[2]))
