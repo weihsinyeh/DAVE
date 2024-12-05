@@ -66,7 +66,7 @@ def reduce_dict(input_dict, average=False):
 
 
 def train(args):
-
+    
     if args.skip_train:
         print("SKIPPING TRAIN")
         return

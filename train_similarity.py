@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, json
 from time import perf_counter
 
 import torch
@@ -12,7 +12,7 @@ from models.dave_tr import build_model
 from utils.arg_parser import get_argparser
 from utils.data import FSC147WithDensityMapSimilarityStitched
 from utils.losses import Criterion
-
+from tqdm import tqdm
 DATASETS = {
     'fsc147': FSC147WithDensityMapSimilarityStitched,
 }
@@ -38,31 +38,15 @@ def train(args):
         print("SKIPPING TRAIN")
         return
 
-    if 'SLURM_PROCID' in os.environ:
-        world_size = int(os.environ['SLURM_NTASKS'])
-        rank = int(os.environ['SLURM_PROCID'])
-        gpu = rank % torch.cuda.device_count()
-        print("Running on SLURM", world_size, rank, gpu)
-    else:
-        world_size = int(os.environ['WORLD_SIZE'])
-        rank = int(os.environ['RANK'])
-        gpu = int(os.environ['LOCAL_RANK'])
-
-    torch.cuda.set_device(gpu)
-    device = torch.device(gpu)
-
-    dist.init_process_group(
-        backend='nccl', init_method='env://',
-        world_size=world_size, rank=rank
-    )
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     assert args.backbone in ['resnet18', 'resnet50', 'resnet101']
     assert args.reduction in [4, 8, 16]
 
-    model = DistributedDataParallel(
-        build_model(args).to(device),
-        device_ids=[gpu],
-        output_device=gpu
+    model = build_model(args).to(device)
+
+    model.load_state_dict(
+        torch.load(os.path.join(args.model_path, args.model_name + '.pth'))['model'], strict=False
     )
 
     backbone_params = dict()
@@ -84,7 +68,7 @@ def train(args):
     pretrained_dict_feat = {k.split("backbone.backbone.")[1]: v for k, v in
                             torch.load(os.path.join(args.model_path, args.model_name+'.pth'))[
                                 'model'].items() if 'backbone' in k}
-    model.module.backbone.backbone.load_state_dict(pretrained_dict_feat)    
+    model.backbone.backbone.load_state_dict(pretrained_dict_feat)    
 
     optimizer = torch.optim.AdamW(
         [
@@ -120,7 +104,7 @@ def train(args):
 
     train_loader = DataLoader(
         train,
-        sampler=DistributedSampler(train),
+        shuffle=True,
         batch_size=args.batch_size,
         drop_last=False,
         num_workers=args.num_workers,
@@ -135,24 +119,24 @@ def train(args):
     )
     val_loader = DataLoader(
         val,
-        sampler=DistributedSampler(val),
+        shuffle=False,
         batch_size=args.batch_size,
         drop_last=False,
         num_workers=args.num_workers
     )
     
-
+    sim_logdir = "./sim_logdir"
+    os.makedirs(sim_logdir, exist_ok=True)
     print("NUM STEPS", len(train_loader) * args.epochs)
-    print(rank, len(train_loader))
+
     for epoch in range(start_epoch + 1, args.epochs + 1):
         start = perf_counter()
         train_loss = torch.tensor(0.0).to(device)
         val_loss = torch.tensor(0.0).to(device)
 
-        train_loader.sampler.set_epoch(epoch)
         model.train()
 
-        for img, bboxes, indices, density_map,  img_ids in train_loader:
+        for img, bboxes, indices, density_map,  img_ids in tqdm(train_loader, desc="Training Progress", unit="batch"):
             img = img.to(device)
             bboxes = bboxes.to(device)
             optimizer.zero_grad()
@@ -164,52 +148,61 @@ def train(args):
                 nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             optimizer.step()
 
-
         print("VALIDATION")
         model.eval()
         with torch.no_grad():
-            for img, bboxes,indices, density_map, img_ids in val_loader:
+            data_num = 0
+            for img, bboxes,indices, density_map, img_ids in tqdm(val_loader, desc="Validation Progress", unit="batch"):
                 img = img.to(device)
                 bboxes = bboxes.to(device)
 
                 optimizer.zero_grad()
                 loss, _, _ = model(img, bboxes)
                 val_loss += loss
-            
-        dist.all_reduce_multigpu([val_loss])
-        if rank == 0:
-            print('val_loss',val_loss)
+                data_num += 1
 
         scheduler.step()
+        end = perf_counter()
+        best_epoch = False
+        checkpoint = {
+                'epoch': epoch,
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                'best_val_ae': val_loss.item() / len(val)
+        }
+        path_dir = os.path.join(args.model_path, "similarity")
+        os.makedirs(path_dir, exist_ok=True)
+        path_name = os.path.join(path_dir, f'{args.det_model_name}_{epoch}.pth')
+        torch.save( checkpoint, path_name)
+        print("Epoch", epoch)
+        print("Length of train",len(train))
+        print("Length of val",len(val))
+        print("Train loss", train_loss.item() / len(train))
+        print("Val loss", val_loss.item() / len(val))
+        print("end - start", end - start)
+        if val_loss.item()  < best:
+            best = val_loss
+            best_epoch = True
+            if best_epoch :
+                print('Best Epoch : ', epoch)
+                print('Best Model is saved to :',path_name)
+        print("*****************************************")
 
-        if rank == 0:
-            end = perf_counter()
-            best_epoch = False
-            if val_loss.item()  < best:
-                best = val_loss
-        
-                checkpoint = {
-                    'epoch': epoch,
-                    'model': model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                    'best_val_ae': val_loss.item() / len(val)
-                }
-                torch.save(
-                    checkpoint,
-                    os.path.join(args.model_path, f'{args.det_model_name}.pth')
-                )
-                best_epoch = True
-
-            if rank == 0:
-                print("Epoch", epoch)
-                print(
-                    train_loss.item() / len(train),
-                    val_loss.item(),
-                    end - start,
-                    'best' if best_epoch else '',
-                )
-                print("********")
+        epoch_data = {
+            "epoch": epoch,
+            "train_length": len(train),
+            "val_length": len(val),
+            "train_loss": train_loss.item() / len(train),
+            "val_loss": val_loss.item() / len(val),
+            "time_elapsed": end - start,
+            "best_epoch": best_epoch if val_loss.item() < best else False,
+            "best_model_path": path_name if val_loss.item() < best else None
+        }
+        json_filename = os.path.join(sim_logdir, f"sim_{epoch}.json")
+        with open(json_filename, 'w') as json_file:
+            json.dump(epoch_data, json_file, indent=4)
+        print(f"Epoch {epoch} information saved to {json_filename}")
 
     if args.skip_test:
         dist.destroy_process_group()
