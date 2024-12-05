@@ -16,18 +16,22 @@ def extend_bboxes(bboxes, extension_factor=1.1):
     new_width = width * extension_factor
     new_height = height * extension_factor
 
-    extended_bboxes = torch.cat([
-        (centers[:, 0] - new_width / 2).unsqueeze(1),  # x1
-        (centers[:, 1] - new_height / 2).unsqueeze(1),  # y1
-        (centers[:, 0] + new_width / 2).unsqueeze(1),  # x2
-        (centers[:, 1] + new_height / 2).unsqueeze(1)  # y2
-    ], dim=1)
+    extended_bboxes = torch.cat(
+        [
+            (centers[:, 0] - new_width / 2).unsqueeze(1),  # x1
+            (centers[:, 1] - new_height / 2).unsqueeze(1),  # y1
+            (centers[:, 0] + new_width / 2).unsqueeze(1),  # x2
+            (centers[:, 1] + new_height / 2).unsqueeze(1),  # y2
+        ],
+        dim=1,
+    )
 
     return extended_bboxes
 
 
 import torch
 import math
+
 
 def mask_density(image_batch, boxes_batch, img=None):
     """
@@ -49,9 +53,13 @@ def mask_density(image_batch, boxes_batch, img=None):
     for box in boxes_batch.box.long():
         x1, y1, x2, y2 = box
         mask_tensor[:, y1:y2, x1:x2] = 1
-    max_bbx = boxes_batch[torch.where(torch.median(boxes_batch.area())==boxes_batch.area())[0].item()].box
-    max_wh_half = (2 * math.floor((max_bbx[3] - max_bbx[1]) / 2 / 2) + 1,
-                   2 * math.floor((max_bbx[2] - max_bbx[0]) / 2 / 2) + 1)
-    mask_tensor =mask_tensor.unsqueeze(0)
+    max_bbx = boxes_batch[
+        torch.where(torch.median(boxes_batch.area()) == boxes_batch.area())[0].item()
+    ].box
+    max_wh_half = (
+        2 * math.floor((max_bbx[3] - max_bbx[1]) / 2 / 2) + 1,
+        2 * math.floor((max_bbx[2] - max_bbx[0]) / 2 / 2) + 1,
+    )
+    mask_tensor = mask_tensor.unsqueeze(0)
     masked_image_batch = image_batch * mask_tensor.to(image_batch.device)
     return masked_image_batch

@@ -19,7 +19,7 @@ class UpsamplingLayer(nn.Module):
         self.layer = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.LeakyReLU(),
-            nn.UpsamplingBilinear2d(scale_factor=scale_factor)
+            nn.UpsamplingBilinear2d(scale_factor=scale_factor),
         )
 
     def forward(self, x):
@@ -37,7 +37,7 @@ class DensityMapRegressor(nn.Module):
                 UpsamplingLayer(128, 64),
                 UpsamplingLayer(64, 32),
                 nn.Conv2d(32, 1, kernel_size=1),
-                nn.LeakyReLU()
+                nn.LeakyReLU(),
             )
         elif reduction == 16:
             self.regressor = nn.Sequential(
@@ -46,7 +46,7 @@ class DensityMapRegressor(nn.Module):
                 UpsamplingLayer(64, 32),
                 UpsamplingLayer(32, 16),
                 nn.Conv2d(16, 1, kernel_size=1),
-                nn.LeakyReLU()
+                nn.LeakyReLU(),
             )
 
         self.reset_parameters()

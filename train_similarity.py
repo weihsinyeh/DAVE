@@ -14,8 +14,9 @@ from utils.data import FSC147WithDensityMapSimilarityStitched
 from utils.losses import Criterion
 
 DATASETS = {
-    'fsc147': FSC147WithDensityMapSimilarityStitched,
+    "fsc147": FSC147WithDensityMapSimilarityStitched,
 }
+
 
 def reduce_dict(input_dict, average=False):
     with torch.no_grad():
@@ -38,31 +39,28 @@ def train(args):
         print("SKIPPING TRAIN")
         return
 
-    if 'SLURM_PROCID' in os.environ:
-        world_size = int(os.environ['SLURM_NTASKS'])
-        rank = int(os.environ['SLURM_PROCID'])
+    if "SLURM_PROCID" in os.environ:
+        world_size = int(os.environ["SLURM_NTASKS"])
+        rank = int(os.environ["SLURM_PROCID"])
         gpu = rank % torch.cuda.device_count()
         print("Running on SLURM", world_size, rank, gpu)
     else:
-        world_size = int(os.environ['WORLD_SIZE'])
-        rank = int(os.environ['RANK'])
-        gpu = int(os.environ['LOCAL_RANK'])
+        world_size = int(os.environ["WORLD_SIZE"])
+        rank = int(os.environ["RANK"])
+        gpu = int(os.environ["LOCAL_RANK"])
 
     torch.cuda.set_device(gpu)
     device = torch.device(gpu)
 
     dist.init_process_group(
-        backend='nccl', init_method='env://',
-        world_size=world_size, rank=rank
+        backend="nccl", init_method="env://", world_size=world_size, rank=rank
     )
 
-    assert args.backbone in ['resnet18', 'resnet50', 'resnet101']
+    assert args.backbone in ["resnet18", "resnet50", "resnet101"]
     assert args.reduction in [4, 8, 16]
 
     model = DistributedDataParallel(
-        build_model(args).to(device),
-        device_ids=[gpu],
-        output_device=gpu
+        build_model(args).to(device), device_ids=[gpu], output_device=gpu
     )
 
     backbone_params = dict()
@@ -72,35 +70,37 @@ def train(args):
     for n, p in model.named_parameters():
         if not p.requires_grad:
             continue
-        if 'backbone' in n:
+        if "backbone" in n:
             backbone_params[n] = p
-        elif 'box_predictor' in n:
+        elif "box_predictor" in n:
             fcos_params[n] = p
-        elif 'feat_comp' in n:
+        elif "feat_comp" in n:
             feat_comp[n] = p
         else:
             non_backbone_params[n] = p
 
-    pretrained_dict_feat = {k.split("backbone.backbone.")[1]: v for k, v in
-                            torch.load(os.path.join(args.model_path, args.model_name+'.pth'))[
-                                'model'].items() if 'backbone' in k}
-    model.module.backbone.backbone.load_state_dict(pretrained_dict_feat)    
+    pretrained_dict_feat = {
+        k.split("backbone.backbone.")[1]: v
+        for k, v in torch.load(os.path.join(args.model_path, args.model_name + ".pth"))[
+            "model"
+        ].items()
+        if "backbone" in k
+    }
+    model.module.backbone.backbone.load_state_dict(pretrained_dict_feat)
 
     optimizer = torch.optim.AdamW(
-        [
-            {'params': feat_comp.values()}
-        ],
+        [{"params": feat_comp.values()}],
         lr=args.lr,
         weight_decay=args.weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop, gamma=0.25)
     if args.resume_training:
-        checkpoint = torch.load(os.path.join(args.model_path, f'{args.model_name}.pth'))
-        model.load_state_dict(checkpoint['model'])
-        start_epoch = checkpoint['epoch']
-        best = checkpoint['best_val_ae']
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        scheduler.load_state_dict(checkpoint['scheduler'])
+        checkpoint = torch.load(os.path.join(args.model_path, f"{args.model_name}.pth"))
+        model.load_state_dict(checkpoint["model"])
+        start_epoch = checkpoint["epoch"]
+        best = checkpoint["best_val_ae"]
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        scheduler.load_state_dict(checkpoint["scheduler"])
     else:
         start_epoch = 0
         best = 10000000
@@ -111,11 +111,10 @@ def train(args):
     train = DATASETS[args.dataset](
         args.data_path,
         args.image_size,
-        split='train',
+        split="train",
         num_objects=args.num_objects,
         tiling_p=args.tiling_p,
         zero_shot=args.zero_shot or args.orig_dmaps,
-
     )
 
     train_loader = DataLoader(
@@ -128,7 +127,7 @@ def train(args):
     val = DATASETS[args.dataset](
         args.data_path,
         args.image_size,
-        split='val',
+        split="val",
         num_objects=args.num_objects,
         tiling_p=args.tiling_p,
         zero_shot=args.zero_shot or args.orig_dmaps,
@@ -138,9 +137,8 @@ def train(args):
         sampler=DistributedSampler(val),
         batch_size=args.batch_size,
         drop_last=False,
-        num_workers=args.num_workers
+        num_workers=args.num_workers,
     )
-    
 
     print("NUM STEPS", len(train_loader) * args.epochs)
     print(rank, len(train_loader))
@@ -152,7 +150,7 @@ def train(args):
         train_loader.sampler.set_epoch(epoch)
         model.train()
 
-        for img, bboxes, indices, density_map,  img_ids in train_loader:
+        for img, bboxes, indices, density_map, img_ids in train_loader:
             img = img.to(device)
             bboxes = bboxes.to(device)
             optimizer.zero_grad()
@@ -164,40 +162,39 @@ def train(args):
                 nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             optimizer.step()
 
-
         print("VALIDATION")
         model.eval()
         with torch.no_grad():
-            for img, bboxes,indices, density_map, img_ids in val_loader:
+            for img, bboxes, indices, density_map, img_ids in val_loader:
                 img = img.to(device)
                 bboxes = bboxes.to(device)
 
                 optimizer.zero_grad()
                 loss, _, _ = model(img, bboxes)
                 val_loss += loss
-            
+
         dist.all_reduce_multigpu([val_loss])
         if rank == 0:
-            print('val_loss',val_loss)
+            print("val_loss", val_loss)
 
         scheduler.step()
 
         if rank == 0:
             end = perf_counter()
             best_epoch = False
-            if val_loss.item()  < best:
+            if val_loss.item() < best:
                 best = val_loss
-        
+
                 checkpoint = {
-                    'epoch': epoch,
-                    'model': model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                    'best_val_ae': val_loss.item() / len(val)
+                    "epoch": epoch,
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "best_val_ae": val_loss.item() / len(val),
                 }
                 torch.save(
                     checkpoint,
-                    os.path.join(args.model_path, f'{args.det_model_name}.pth')
+                    os.path.join(args.model_path, f"{args.det_model_name}.pth"),
                 )
                 best_epoch = True
 
@@ -207,7 +204,7 @@ def train(args):
                     train_loss.item() / len(train),
                     val_loss.item(),
                     end - start,
-                    'best' if best_epoch else '',
+                    "best" if best_epoch else "",
                 )
                 print("********")
 
@@ -215,10 +212,8 @@ def train(args):
         dist.destroy_process_group()
 
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser('DAVE', parents=[get_argparser()])
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("DAVE", parents=[get_argparser()])
     args = parser.parse_args()
     print(args)
     train(args)
-
