@@ -15,7 +15,7 @@ from torch import distributed as dist
 import numpy as np
 import skimage
 import math
-
+from tqdm import tqdm
 DATASETS = {
     'fsc147': FSC147WithDensityMapDOWNSIZE,
 }
@@ -174,7 +174,7 @@ def train(args):
         
         model.train()
 
-        for img, bboxes, density_map, ids, scale_x, scale_y, _ in train_loader:
+        for img, bboxes, density_map, ids, scale_x, scale_y, _ in tqdm(train_loader, desc="Training Progress", unit="batch"):
             img = img.to(device)
             bboxes = bboxes.to(device)
             density_map = density_map.to(device)
@@ -219,7 +219,7 @@ def train(args):
 
         model.eval()
         with torch.no_grad():
-            for img, bboxes, density_map, ids, scale_x, scale_y,_ in val_loader:
+            for img, bboxes, density_map, ids, scale_x, scale_y, _ in tqdm(val_loader, desc="Validation Progress", unit="batch"):
                 gt_bboxes, _ = val.get_gt_bboxes(ids)
                 img = img.to(device)
                 bboxes = bboxes.to(device)

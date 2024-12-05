@@ -3,7 +3,12 @@ export NCCL_DEBUG=INFO
 export NCCL_IB_DISABLE=1
 export NCCL_NET_GDR_DISABLE=1
 export NCCL_P2P_DISABLE=1
-CUDA_VISIBLE_DEVICES=1 python ./train_det.py \
+export CUDA_VISIBLE_DEVICES=2
+
+# 4 -> 2
+# 3 -> 1
+# 2 -> 0
+python ./train_det.py \
 --model_name base_3_shot \
 --det_model_name DAVE_3_shot \
 --data_path /project/g/r13922043/dave_dataset/FSC147 \
@@ -21,7 +26,7 @@ CUDA_VISIBLE_DEVICES=1 python ./train_det.py \
 --lr 1e-4 \
 --lr_drop 10 \
 --weight_decay 1e-3 \
---batch_size 1 \
+--batch_size 4 \
 --dropout 0.1 \
 --num_workers 8 \
 --max_grad_norm 0.1 \

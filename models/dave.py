@@ -246,20 +246,21 @@ class COTR(nn.Module):
         return location
 
     def predict_density_map(self, backbone_features, bboxes):
-        bs, _, bb_h, bb_w = backbone_features.size()
+        # backbone feature : 
+        batch_size, _, bb_h, bb_w = backbone_features.size()
+        print("backbone_features.size()",backbone_features.size()) # 4, 3584, 64, 64
 
         # # prepare the encoder input
         src = self.input_proj(backbone_features)
-        bs, c, h, w = src.size()
-        pos_emb = self.pos_emb(bs, h, w, src.device).flatten(2).permute(2, 0, 1)
+        batch_size, c, h, w = src.size()
+        pos_emb = self.pos_emb(batch_size, h, w, src.device).flatten(2).permute(2, 0, 1)
         src = src.flatten(2).permute(2, 0, 1)
 
-        # push through the encoder
+        # push through the encoder to process the feature
         if self.num_encoder_layers > 0:
             if backbone_features.shape[2] * backbone_features.shape[3] > 6000:
                 enc = self.encoder.cpu()
-                memory = enc(src.cpu(), pos_emb.cpu(), src_key_padding_mask=None, src_mask=None).to(
-                    backbone_features.device)
+                memory = enc(src.cpu(), pos_emb.cpu(), src_key_padding_mask=None, src_mask=None).to(backbone_features.device)
             else:
                 memory = self.encoder(src, pos_emb, src_key_padding_mask=None, src_mask=None)
         else:
@@ -269,22 +270,20 @@ class COTR(nn.Module):
         x = memory.permute(1, 2, 0).reshape(-1, self.emb_dim, bb_h, bb_w)
 
         bboxes_ = torch.cat([
-            torch.arange(
-                bs, requires_grad=False
+            torch.arange( batch_size, requires_grad=False
             ).to(bboxes.device).repeat_interleave(self.num_objects).reshape(-1, 1),
             bboxes[:, :self.num_objects].flatten(0, 1),
         ], dim=1)
 
-        # extract the objectness
+        # Extract the objectness
         if self.use_objectness and not self.zero_shot:
             box_hw = torch.zeros(bboxes.size(0), bboxes.size(1), 2).to(bboxes.device)
             box_hw[:, :, 0] = bboxes[:, :, 2] - bboxes[:, :, 0]
             box_hw[:, :, 1] = bboxes[:, :, 3] - bboxes[:, :, 1]
-            objectness = self.objectness(box_hw).reshape(
-                bs, -1, self.kernel_dim ** 2, self.emb_dim
-            ).flatten(1, 2).transpose(0, 1)
+            # Use self.objectness to extract feature
+            objectness = self.objectness(box_hw).reshape( batch_size, -1, self.kernel_dim ** 2, self.emb_dim).flatten(1, 2).transpose(0, 1)
         elif self.zero_shot:
-            objectness = self.objectness.expand(bs, -1, -1, -1).flatten(1, 2).transpose(0, 1)
+            objectness = self.objectness.expand(batch_size, -1, -1, -1).flatten(1, 2).transpose(0, 1)
         else:
             objectness = None
 
@@ -293,28 +292,34 @@ class COTR(nn.Module):
             # reshape bboxes into the format suitable for roi_align
             bboxes = torch.cat([
                 torch.arange(
-                    bs, requires_grad=False
+                    batch_size, requires_grad=False
                 ).to(bboxes.device).repeat_interleave(self.num_objects).reshape(-1, 1),
                 bboxes.flatten(0, 1),
             ], dim=1)
+            ## ROI align
             appearance = roi_align(
                 x,
                 boxes=bboxes, output_size=self.kernel_dim,
                 spatial_scale=1.0 / self.reduction, aligned=True
             ).permute(0, 2, 3, 1).reshape(
-                bs, self.num_objects * self.kernel_dim ** 2, -1
+                batch_size, self.num_objects * self.kernel_dim ** 2, -1
             ).transpose(0, 1)
         else:
             appearance = None
 
         if self.use_query_pos_emb:
             query_pos_emb = self.pos_emb(
-                bs, self.kernel_dim, self.kernel_dim, memory.device
+                batch_size, self.kernel_dim, self.kernel_dim, memory.device
             ).flatten(2).permute(2, 0, 1).repeat(self.num_objects, 1, 1)
         else:
             query_pos_emb = None
 
         if self.num_decoder_layers > 0:
+            # print("objectness.shape",objectness.shape)          # 27, 4, 256 (every feature embedding)
+            # print("appearance.shape",appearance.shape)          # 27, 4, 256 (every feature embedding)
+            # print("memory.shape",memory.shape)                  # 4096, 4, 256 (every feature embedding)
+            # print("pos_emb.shape",pos_emb.shape)                # 4096, 4, 256 (every feature embedding)
+            # print("query_pos_emb.shape",query_pos_emb.shape)    # 27, 4, 256 (every feature embedding)
             weights = self.decoder(
                 objectness if objectness is not None else appearance,
                 appearance, memory, pos_emb, query_pos_emb
@@ -331,7 +336,7 @@ class COTR(nn.Module):
         outputs_R = list()
         for i in range(weights.size(0)):
             kernels = weights[i, ...].permute(1, 0, 2).reshape(
-                bs, self.num_objects, self.kernel_dim, self.kernel_dim, -1
+                batch_size, self.num_objects, self.kernel_dim, self.kernel_dim, -1
             ).permute(0, 1, 4, 2, 3).flatten(0, 2)[:, None, ...]
             if self.num_objects > 1 and not self.zero_shot:
                 correlation_maps = F.conv2d(
@@ -340,9 +345,7 @@ class COTR(nn.Module):
                     bias=None,
                     padding=self.kernel_dim // 2,
                     groups=kernels.size(0)
-                ).view(
-                    bs, self.num_objects, self.emb_dim, bb_h, bb_w
-                )
+                ).view( batch_size, self.num_objects, self.emb_dim, bb_h, bb_w )
                 softmaxed_correlation_maps = correlation_maps.softmax(dim=1)
                 correlation_maps = torch.mul(softmaxed_correlation_maps, correlation_maps).sum(dim=1)
             else:
@@ -353,7 +356,7 @@ class COTR(nn.Module):
                     padding=self.kernel_dim // 2,
                     groups=kernels.size(0)
                 ).view(
-                    bs, self.num_objects, self.emb_dim, bb_h, bb_w
+                    batch_size, self.num_objects, self.emb_dim, bb_h, bb_w
                 ).max(dim=1)[0]
 
             # send through regression head
@@ -370,7 +373,7 @@ class COTR(nn.Module):
     def forward(self, x_img, bboxes, name='', dmap=None, classes=None):
         self.num_objects = bboxes.shape[1]
         backbone_features = self.backbone(x_img)
-        bs, _, bb_h, bb_w = backbone_features.size()
+        batch_size, _, bb_h, bb_w = backbone_features.size()
 
         #####################
         # DETECTION STAGE
@@ -406,7 +409,7 @@ class COTR(nn.Module):
         if not self.zero_shot:
             bboxes_ = torch.cat([
                 torch.arange(
-                    bs, requires_grad=False
+                    batch_size, requires_grad=False
                 ).to(bboxes.device).repeat_interleave(self.num_objects).reshape(-1, 1),
                 bboxes[:, :self.num_objects].flatten(0, 1),
             ], dim=1)
@@ -422,8 +425,8 @@ class COTR(nn.Module):
             1, bboxes_.shape[0], 3, 3, -1
         ).permute(0, 1, 4, 2, 3)
         
-        feat_pairs = self.feat_comp(feat_vectors.reshape(bs * bboxes_.shape[0], 3584, 3, 3))\
-            .reshape(bs, bboxes_.shape[0], -1).permute(1, 0, 2)
+        feat_pairs = self.feat_comp(feat_vectors.reshape(batch_size * bboxes_.shape[0], 3584, 3, 3))\
+            .reshape(batch_size, bboxes_.shape[0], -1).permute(1, 0, 2)
 
         # Speed up, nothing changes
         if len(feat_pairs) > 500:
