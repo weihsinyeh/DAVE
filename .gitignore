@@ -134,3 +134,4 @@ MNIST
 *.json
 
 train_det_log
+visualizations
