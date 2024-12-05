@@ -88,7 +88,7 @@ def demo(args):
     for i in range(len(pred_boxes)):
         box = pred_boxes[i]
 
-        plt.plot(
+        plt.plot(  # x0 y0 x1 y1
             [box[0], box[0], box[2], box[2], box[0]],
             [box[1], box[3], box[3], box[1], box[1]],
             linewidth=2,

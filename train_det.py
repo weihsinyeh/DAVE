@@ -19,7 +19,9 @@ from tqdm import tqdm
 
 DATASETS = {
     "fsc147": FSC147WithDensityMapDOWNSIZE,
+    "fsc147": FSC147WithDensityMapDOWNSIZE,
 }
+
 
 
 def generate_bbox(density_map, tlrb):
@@ -43,8 +45,20 @@ def generate_bbox(density_map, tlrb):
                 y11 + r[x11][y11].item(),
                 x11 + t[x11][y11].item(),
             ]
+            box = [
+                y11 - b[x11][y11].item(),
+                x11 - l[x11][y11].item(),
+                y11 + r[x11][y11].item(),
+                x11 + t[x11][y11].item(),
+            ]
             boxes.append(box)
             scores.append(
+                1
+                - math.fabs(
+                    density[int(box[1]) : int(box[3]), int(box[0]) : int(box[2])].sum()
+                    - 1
+                )
+            )
                 1
                 - math.fabs(
                     density[int(box[1]) : int(box[3]), int(box[0]) : int(box[2])].sum()
@@ -54,7 +68,9 @@ def generate_bbox(density_map, tlrb):
 
         b = BoxList(boxes, (density_map.shape[3], density_map.shape[2]))
         b.fields["scores"] = torch.tensor(scores)
+        b.fields["scores"] = torch.tensor(scores)
         b = b.clip()
+        b = boxlist_nms(b, b.fields["scores"], 0.55)
         b = boxlist_nms(b, b.fields["scores"], 0.55)
 
         bboxes.append(b)
@@ -92,6 +108,8 @@ def train(args):
     model.load_state_dict(
         torch.load(os.path.join(args.model_path, args.model_name + ".pth"))["model"],
         strict=False,
+        torch.load(os.path.join(args.model_path, args.model_name + ".pth"))["model"],
+        strict=False,
     )
 
     backbone_params = dict()
@@ -102,9 +120,12 @@ def train(args):
         if not p.requires_grad:
             continue
         if "backbone" in n:
+        if "backbone" in n:
             backbone_params[n] = p
         elif "box_predictor" in n:
+        elif "box_predictor" in n:
             fcos_params[n] = p
+        elif "feat_comp" in n:
         elif "feat_comp" in n:
             feat_comp[n] = p
         else:
@@ -113,12 +134,19 @@ def train(args):
     optimizer = torch.optim.AdamW(
         [
             {"params": fcos_params.values(), "lr": args.lr},
+            {"params": fcos_params.values(), "lr": args.lr},
         ],
         lr=args.lr,
         weight_decay=args.weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop, gamma=0.25)
     if args.resume_training:
+        checkpoint = torch.load(os.path.join(args.model_path, f"{args.model_name}.pth"))
+        model.load_state_dict(checkpoint["model"])
+        start_epoch = checkpoint["epoch"]
+        best = checkpoint["best_val_ae"]
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        scheduler.load_state_dict(checkpoint["scheduler"])
         checkpoint = torch.load(os.path.join(args.model_path, f"{args.model_name}.pth"))
         model.load_state_dict(checkpoint["model"])
         start_epoch = checkpoint["epoch"]
@@ -141,6 +169,14 @@ def train(args):
             [512, 100000000],
         ],  # config.sizes,
         "giou",  # config.iou_loss_type,
+        [
+            [-1, args.fcos_pred_size],
+            [64, 128],
+            [128, 256],
+            [256, 512],
+            [512, 100000000],
+        ],  # config.sizes,
+        "giou",  # config.iou_loss_type,
         True,  # config.center_sample,
         [1],  # config.fpn_strides,
         5,  # config.pos_radius,
@@ -150,14 +186,17 @@ def train(args):
         args.data_path,
         args.image_size,
         split="train",
+        split="train",
         num_objects=args.num_objects,
         tiling_p=args.tiling_p,
         zero_shot=args.zero_shot or args.orig_dmaps,
+        skip_cars=args.skip_cars,
         skip_cars=args.skip_cars,
     )
     val = DATASETS[args.dataset](
         args.data_path,
         args.image_size,
+        split="val",
         split="val",
         num_objects=args.num_objects,
         tiling_p=args.tiling_p,
@@ -169,12 +208,14 @@ def train(args):
         batch_size=args.batch_size,
         drop_last=True,
         num_workers=args.num_workers,
+        num_workers=args.num_workers,
     )
     val_loader = DataLoader(
         val,
         shuffle=False,
         batch_size=args.batch_size,
         drop_last=False,
+        num_workers=args.num_workers,
         num_workers=args.num_workers,
     )
     print("NUM STEPS", len(train_loader) * args.epochs)
@@ -184,7 +225,16 @@ def train(args):
         train_losses = {
             k: torch.tensor(0.0).to(device) for k in criterion.losses.keys()
         }
+        train_losses = {
+            k: torch.tensor(0.0).to(device) for k in criterion.losses.keys()
+        }
         val_losses = {k: torch.tensor(0.0).to(device) for k in criterion.losses.keys()}
+        aux_train_losses = {
+            k: torch.tensor(0.0).to(device) for k in aux_criterion.losses.keys()
+        }
+        aux_val_losses = {
+            k: torch.tensor(0.0).to(device) for k in aux_criterion.losses.keys()
+        }
         aux_train_losses = {
             k: torch.tensor(0.0).to(device) for k in aux_criterion.losses.keys()
         }
@@ -203,6 +253,12 @@ def train(args):
             img = img.to(device)
             bboxes = bboxes.to(device)
             density_map = density_map.to(device)
+            targets = (
+                BoxList(bboxes, (args.image_size, args.image_size), mode="xyxy")
+                .to(device)
+                .resize((args.fcos_pred_size, args.fcos_pred_size))
+            )
+            targets.fields["labels"] = [1 for __ in range(args.batch_size * 2)]
             targets = (
                 BoxList(bboxes, (args.image_size, args.image_size), mode="xyxy")
                 .to(device)
@@ -229,12 +285,17 @@ def train(args):
                 sum([ml for ml in main_losses.values()]) * 0
                 + sum([al for alls in aux_losses for al in alls.values()]) * 0
                 + det_loss  # + l
+                sum([ml for ml in main_losses.values()]) * 0
+                + sum([al for alls in aux_losses for al in alls.values()]) * 0
+                + det_loss  # + l
             )
             loss.backward()
             if args.max_grad_norm > 0:
                 nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             optimizer.step()
             train_losses = {
+                k: train_losses[k] + main_losses[k] * img.size(0)
+                for k in train_losses.keys()
                 k: train_losses[k] + main_losses[k] * img.size(0)
                 for k in train_losses.keys()
             }
@@ -274,6 +335,17 @@ def train(args):
                         box_iou(gt_bboxes[iii], boxes_pred[iii].box).max(dim=1)[0].sum()
                         / gt_bboxes[iii].shape[1]
                     )
+                    boxes_pred[iii].box = (
+                        boxes_pred[iii].box
+                        * 1
+                        / torch.tensor(
+                            [scale_y[iii], scale_x[iii], scale_y[iii], scale_x[iii]]
+                        )
+                    )
+                    mAP += (
+                        box_iou(gt_bboxes[iii], boxes_pred[iii].box).max(dim=1)[0].sum()
+                        / gt_bboxes[iii].shape[1]
+                    )
 
                 if args.normalized_l2:
                     with torch.no_grad():
@@ -284,8 +356,12 @@ def train(args):
                 aux_losses = [
                     aux_criterion(aux, density_map, bboxes, num_objects)
                     for aux in aux_R
+                    aux_criterion(aux, density_map, bboxes, num_objects)
+                    for aux in aux_R
                 ]
                 val_losses = {
+                    k: val_losses[k] + main_losses[k] * img.size(0)
+                    for k in val_losses.keys()
                     k: val_losses[k] + main_losses[k] * img.size(0)
                     for k in val_losses.keys()
                 }
@@ -336,6 +412,9 @@ def train(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("DAVE", parents=[get_argparser()])
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("DAVE", parents=[get_argparser()])
     args = parser.parse_args()
     print(args)
     train(args)
+

@@ -8,9 +8,7 @@ def get_argparser():
     parser.add_argument(
         "--data_path", default=r"C:\projects\DAVE\FSC147_384_V2", type=str
     )
-    parser.add_argument(
-        "--model_path", default="/project/g/r13922043/dave_model", type=str
-    )
+    parser.add_argument("--model_path", default="material/", type=str)
     parser.add_argument("--det_model_name", default="DAVE", type=str)
     parser.add_argument("--dataset", default="fsc147", type=str)
     parser.add_argument("--backbone", default="resnet18", type=str)

@@ -416,15 +416,19 @@ class FSC147WithDensityMapSCALE2BOX(Dataset):
         )[:3, [0, 2], :].reshape(-1, 4)[: self.num_objects, ...]
 
         bboxes = bboxes / torch.tensor([w, h, w, h]) * self.img_size
-        density_map = torch.from_numpy(
-            np.load(
-                os.path.join(
-                    self.data_path,
-                    "gt_density_map_adaptive_512_512_object_VarV2",
-                    os.path.splitext(self.image_names[idx])[0] + ".npy",
+        if self.split == "train":
+            density_map = torch.from_numpy(
+                np.load(
+                    os.path.join(
+                        self.data_path,
+                        "gt_density_map_adaptive_512_512_object_VarV2",
+                        os.path.splitext(self.image_names[idx])[0] + ".npy",
+                    )
                 )
-            )
-        ).unsqueeze(0)
+            ).unsqueeze(0)
+            print(density_map.shape)
+        else:  # not needed, use number of point
+            density_map = torch.Tensor([[[1]]])
 
         if self.zero_shot:
             scale_x = 1
@@ -528,6 +532,20 @@ class FSC147WithDensityMapSCALE2BOX(Dataset):
             img_name = v["file_name"]
             map_name_2_id[img_name] = img_id
         return map_name_2_id
+
+    def get_image(self, idx):
+        return Image.open(
+            os.path.join(self.data_path, "images_384_VarV2", self.image_names[idx])
+        )
+
+    def get_image_path(self, idx):
+        return os.path.join(self.data_path, "images_384_VarV2", self.image_names[idx])
+
+    def get_gt_count(self, idx):
+        return len(self.annotations[self.image_names[idx]]["points"])
+
+    def get_example_coordinates(self, idx):
+        return self.annotations[self.image_names[idx]]["box_examples_coordinates"]
 
 
 class FSC147WithDensityMapSimilarityStitched(Dataset):

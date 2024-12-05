@@ -1,3 +1,6 @@
+*~
+*.tar
+output_images/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -68,7 +71,7 @@ coverage.xml
 *.pot
 
 # Django stuff:
-*.log
+# *.log
 local_settings.py
 db.sqlite3
 
@@ -131,7 +134,6 @@ MNIST
 *.zip
 
 *.pth
-*.json
 
 train_det_log
 visualizations

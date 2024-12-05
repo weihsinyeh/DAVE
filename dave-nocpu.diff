@@ -1,0 +1,56 @@
+diff --git a/models/dave.py b/models/dave.py
+index 8fc34a8..4a2f0e8 100644
+--- a/models/dave.py
++++ b/models/dave.py
+@@ -300,15 +300,15 @@ class COTR(nn.Module):
+ 
+         # push through the encoder
+         if self.num_encoder_layers > 0:
+-            if backbone_features.shape[2] * backbone_features.shape[3] > 6000:
+-                enc = self.encoder.cpu()
+-                memory = enc(
+-                    src.cpu(), pos_emb.cpu(), src_key_padding_mask=None, src_mask=None
+-                ).to(backbone_features.device)
+-            else:
+-                memory = self.encoder(
+-                    src, pos_emb, src_key_padding_mask=None, src_mask=None
+-                )
++            # if backbone_features.shape[2] * backbone_features.shape[3] > 6000:
++            #    enc = self.encoder.cpu()
++            #    memory = enc(
++            #        src.cpu(), pos_emb.cpu(), src_key_padding_mask=None, src_mask=None
++            #    ).to(backbone_features.device)
++            # else:
++            memory = self.encoder(
++                src, pos_emb, src_key_padding_mask=None, src_mask=None
++            )
+         else:
+             memory = src
+ 
+@@ -471,16 +472,16 @@ class COTR(nn.Module):
+             location = self.compute_location(tblr)
+             return outputs_R[-1], outputs_R[:-1], tblr, location
+ 
+-        if backbone_features.shape[2] * backbone_features.shape[3] > 8000:
+-            self.box_predictor = self.box_predictor.cpu()
+-            tblr = self.box_predictor(
+-                self.upscale(backbone_features.cpu()),
+-                self.upscale(correlation_maps.cpu()),
+-            )
+-        else:
+-            tblr = self.box_predictor(
+-                self.upscale(backbone_features), self.upscale(correlation_maps)
+-            )
++        # if backbone_features.shape[2] * backbone_features.shape[3] > 8000:
++        #    self.box_predictor = self.box_predictor.cpu()
++        #    tblr = self.box_predictor(
++        #        self.upscale(backbone_features.cpu()),
++        #        self.upscale(correlation_maps.cpu()),
++        #    )
++        # else:
++        tblr = self.box_predictor(
++            self.upscale(backbone_features), self.upscale(correlation_maps)
++        )
+ 
+         generated_bboxes = self.generate_bbox(outputR, tblr)[0]
+         bboxes_p = generated_bboxes.box
