@@ -287,9 +287,15 @@ class COTR(nn.Module):
         return location
 
     def predict_density_map(self, backbone_features, bboxes):
+<<<<<<< HEAD
         # backbone feature :
         bs, _, bb_h, bb_w = backbone_features.size()
         print("backbone_features.size()", backbone_features.size())  # 4, 3584, 64, 64
+=======
+        # backbone feature : 
+        batch_size, _, bb_h, bb_w = backbone_features.size()
+        # print("backbone_features.size()",backbone_features.size()) # 4, 3584, 64, 64
+>>>>>>> d0cb8d6 (Remove distributed training of similarity model)
 
         # # prepare the encoder input
         src = self.input_proj(backbone_features)

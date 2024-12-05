@@ -1,20 +1,15 @@
-export WORLD_SIZE=1
-export LOCAL_RANK=0
-export RANK=1
-export MASTER_ADDR=$(hostname -s)
-export MASTER_PORT=50194
-export NCCL_P2P_DISABLE=1
-export NCCL_IB_DISABLE=1
-export NCCL_BLOCKING_WAIT=1
+#!/bin/bash
 export NCCL_DEBUG=INFO
-export TORCH_DISTRIBUTED_DEBUG=DETAIL
-export CUDA_LAUNCH_BLOCKING=0
+export NCCL_IB_DISABLE=1
+export NCCL_NET_GDR_DISABLE=1
+export NCCL_P2P_DISABLE=1
+export CUDA_VISIBLE_DEVICES=2
 
-CUDA_VISIBLE_DEVICES=0 torchrun --nproc_per_node=1 ./train_similarity.py \
+python ./train_similarity.py \
 --model_name base_3_shot \
 --det_model_name verification \
 --data_path /project/g/r13922043/dave_dataset/FSC147 \
---model_path material/ \
+--model_path /project/g/r13922043/dave_model/ \
 --backbone resnet50 \
 --swav_backbone \
 --reduction 8 \
