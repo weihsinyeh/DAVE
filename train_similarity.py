@@ -196,8 +196,8 @@ def train(args):
             "train_loss": train_loss.item() / len(train),
             "val_loss": val_loss.item() / len(val),
             "time_elapsed": end - start,
-            "best_epoch": best_epoch if val_loss.item() < best else False,
-            "best_model_path": path_name if val_loss.item() < best else None
+            "best_epoch": best_epoch,
+            "best_model_path": path_name if (best_epoch == True) else None
         }
         json_filename = os.path.join(sim_logdir, f"sim_{epoch}.json")
         with open(json_filename, 'w') as json_file:
