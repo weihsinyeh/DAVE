@@ -174,11 +174,8 @@ def train(args):
         path_name = os.path.join(path_dir, f'{args.det_model_name}_{epoch}.pth')
         torch.save( checkpoint, path_name)
         print("Epoch", epoch)
-        print("Length of train",len(train))
-        print("Length of val",len(val))
         print("Train loss", train_loss.item() / len(train))
         print("Val loss", val_loss.item() / len(val))
-        print("end - start", end - start)
         if val_loss.item()  < best:
             best = val_loss
             best_epoch = True
@@ -189,11 +186,8 @@ def train(args):
 
         epoch_data = {
             "epoch": epoch,
-            "train_length": len(train),
-            "val_length": len(val),
             "train_loss": train_loss.item() / len(train),
             "val_loss": val_loss.item() / len(val),
-            "time_elapsed": end - start,
             "best_epoch": best_epoch,
             "best_model_path": path_name if (best_epoch == True) else None
         }
@@ -211,3 +205,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     train(args)
+    # "train_length": 3659,
+    # "val_length": 1286,
