@@ -288,13 +288,13 @@ class COTR(nn.Module):
 
     def predict_density_map(self, backbone_features, bboxes):
         # backbone feature :
-        batch_size, _, bb_h, bb_w = backbone_features.size()
+        bs, _, bb_h, bb_w = backbone_features.size()
         print("backbone_features.size()", backbone_features.size())  # 4, 3584, 64, 64
 
         # # prepare the encoder input
         src = self.input_proj(backbone_features)
-        batch_size, c, h, w = src.size()
-        pos_emb = self.pos_emb(batch_size, h, w, src.device).flatten(2).permute(2, 0, 1)
+        bs, c, h, w = src.size()
+        pos_emb = self.pos_emb(bs, h, w, src.device).flatten(2).permute(2, 0, 1)
         src = src.flatten(2).permute(2, 0, 1)
 
         # push through the (transformer) encoder

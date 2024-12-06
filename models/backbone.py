@@ -17,15 +17,12 @@ class Backbone(nn.Module):
         reduction: int,
         swav: bool,
         requires_grad: bool,
-        requires_grad: bool,
     ):
 
         super(Backbone, self).__init__()
 
         resnet = getattr(models, name)(
             replace_stride_with_dilation=[False, False, dilation],
-            pretrained=pretrained,
-            norm_layer=FrozenBatchNorm2d,
             pretrained=pretrained,
             norm_layer=FrozenBatchNorm2d,
         )
@@ -35,8 +32,6 @@ class Backbone(nn.Module):
         # https://github.com/facebookresearch/swav : Facebook release.
         if name == "resnet50" and swav:
             checkpoint = torch.hub.load_state_dict_from_url(
-                "https://dl.fbaipublicfiles.com/deepcluster/swav_800ep_pretrain.pth.tar",
-                map_location="cpu",
                 "https://dl.fbaipublicfiles.com/deepcluster/swav_800ep_pretrain.pth.tar",
                 map_location="cpu",
             )

@@ -44,9 +44,10 @@ def demo(args):
         torch.load(os.path.join(args.model_path, "DAVE_0_shot.pth"))["model"],
         strict=False,
     )
+    path = '/project/g/r13922043/dave_model/similarity/verification_49.pth'
     pretrained_dict_feat = {
         k.split("feat_comp.")[1]: v
-        for k, v in torch.load(os.path.join(args.model_path, "verification.pth"))[
+        for k, v in torch.load(path)[
             "model"
         ].items()
         if "feat_comp" in k
