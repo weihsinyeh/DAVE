@@ -50,7 +50,6 @@ class Backbone(nn.Module):
 
         for n, param in self.backbone.named_parameters():
             if "layer2" not in n and "layer3" not in n and "layer4" not in n:
-            if "layer2" not in n and "layer3" not in n and "layer4" not in n:
                 param.requires_grad_(False)
             else:
                 param.requires_grad_(requires_grad)
