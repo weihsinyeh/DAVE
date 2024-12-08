@@ -402,6 +402,7 @@ class FSC147WithDensityMapSCALE2BOX(Dataset):
         )
 
         w, h = img.size
+        # image is resized later with repect to bounding boxes
         img = T.Compose(
             [
                 T.ToTensor(),
