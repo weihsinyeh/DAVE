@@ -220,7 +220,7 @@ def evaluate(args):
             # record big images
             start_time = time.time()  # Start time measurement
             out, out_no_mask, tblr, pred_boxes = model(
-                img, ex_bboxes, test.image_names[idx]
+                img, ex_bboxes, f"{split}_{idx}", shape=shape
             )
             elapsed_time = time.time() - start_time  # End time measurement
 
@@ -304,6 +304,7 @@ def evaluate(args):
         json.dump(masked, f, indent=4)
 
     plot_queue.put(None)
+    print("Waiting for plotting process to finish")
     plot_process.join()
 
 

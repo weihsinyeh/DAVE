@@ -21,6 +21,7 @@ from .regression_head import DensityMapRegressor
 from .transformer import TransformerEncoder, TransformerDecoder
 from copy import deepcopy
 import time
+import matplotlib.pyplot as plt
 
 
 class COTR(nn.Module):
@@ -294,7 +295,7 @@ class COTR(nn.Module):
 
         # # prepare the encoder input
         src = self.input_proj(backbone_features)
-        bs, c, h, w = src.size()
+        bs, c, h, w = src.size()  # c = 256
         pos_emb = self.pos_emb(bs, h, w, src.device).flatten(2).permute(2, 0, 1)
         src = src.flatten(2).permute(2, 0, 1)
 
@@ -318,6 +319,7 @@ class COTR(nn.Module):
 
         # prepare the decoder input
         x = memory.permute(1, 2, 0).reshape(-1, self.emb_dim, bb_h, bb_w)
+
 
         bboxes_ = torch.cat(
             [
@@ -387,12 +389,14 @@ class COTR(nn.Module):
         else:
             query_pos_emb = None
 
-        if self.num_decoder_layers > 0:
+
+        if self.num_decoder_layers > 0:  # same as LOCA iterative adaptation
             # print("objectness.shape",objectness.shape)          # 27, 4, 256 (every feature embedding)
             # print("appearance.shape",appearance.shape)          # 27, 4, 256 (every feature embedding)
             # print("memory.shape",memory.shape)                  # 4096, 4, 256 (every feature embedding)
             # print("pos_emb.shape",pos_emb.shape)                # 4096, 4, 256 (every feature embedding)
             # print("query_pos_emb.shape",query_pos_emb.shape)    # 27, 4, 256 (every feature embedding)
+
             weights = self.decoder(
                 objectness if objectness is not None else appearance,
                 appearance,
@@ -460,9 +464,51 @@ class COTR(nn.Module):
             outputs_R.append(_x)
         return correlation_maps, outputs_R, outputR
 
-    def forward(self, x_img, bboxes, name="", dmap=None, classes=None, evaluation = False):
+
+    def visualize_features(self, features, num_features, name, shape):
+        # Select the first num_features feature maps
+        selected_features = features[:num_features]
+
+        # Calculate the number of rows and columns
+        num_cols = 8
+        num_rows = (num_features + num_cols - 1) // num_cols  # Ceiling division
+
+        # Plot the feature maps
+        fig, axes = plt.subplots(
+            num_rows, num_cols, figsize=(num_cols * 2, num_rows * 2)
+        )
+        axes = axes.flatten()  # Flatten the axes array for easy iteration
+
+        # print(f"{selected_features.shape=}")
+        # print(f"{shape=}")
+        for i in range(num_features):
+            ax = axes[i]
+            fm = (
+                selected_features[i][: shape[1] // 8, : shape[2] // 8]
+                .clone()
+                .cpu()
+                .numpy()
+            )
+            ax.imshow(fm, cmap="viridis")
+            ax.axis("off")
+
+        # Turn off any unused subplots
+        for i in range(num_features, len(axes)):
+            axes[i].axis("off")
+
+        plt.tight_layout()
+        plt.savefig(f"features/{name}.png")
+
+    def forward(self, x_img, bboxes, name="", dmap=None, classes=None, shape=None, evaluation = False):
+
         self.num_objects = bboxes.shape[1]
-        backbone_features = self.backbone(x_img)  # (batch_size, 2048, H/32, W/32)
+        # print(f"{x_img.shape=}")  # 3, 512, 512
+        backbone_features = self.backbone(x_img)  # (batch_size, 2048, 512/8, 512/8)
+        # print(f"{backbone_features.shape=}")
+
+        # self.visualize_features(
+        #    backbone_features[0], num_features=128, name=name, shape=shape
+        # )
         bs, _, bb_h, bb_w = backbone_features.size()
 
         #####################
