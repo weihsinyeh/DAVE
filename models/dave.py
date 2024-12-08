@@ -489,13 +489,13 @@ class COTR(nn.Module):
 
     def forward(self, x_img, bboxes, name="", dmap=None, classes=None, shape=None):
         self.num_objects = bboxes.shape[1]
-        print(f"{x_img.shape=}")  # 3, 512, 512
+        # print(f"{x_img.shape=}")  # 3, 512, 512
         backbone_features = self.backbone(x_img)  # (batch_size, 2048, 512/8, 512/8)
-        print(f"{backbone_features.shape=}")
+        # print(f"{backbone_features.shape=}")
 
-        self.visualize_features(
-            backbone_features[0], num_features=128, name=name, shape=shape
-        )
+        # self.visualize_features(
+        #    backbone_features[0], num_features=128, name=name, shape=shape
+        # )
         bs, _, bb_h, bb_w = backbone_features.size()
 
         #####################

@@ -214,8 +214,6 @@ def evaluate(args):
         ) in tqdm(test_loader):
             # inference
             idx = ids[0].item()
-            if idx != 229:
-                continue
             img = img.to(device)
             ex_bboxes = ex_bboxes.to(device)
 
